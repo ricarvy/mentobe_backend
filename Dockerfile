@@ -8,7 +8,7 @@ RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirror
 COPY . .
 
 # Expose the port
-EXPOSE 8900
+EXPOSE 8901
 
 # Command to run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8901"]
