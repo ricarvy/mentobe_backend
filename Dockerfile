@@ -11,4 +11,4 @@ COPY . .
 EXPOSE 8900
 
 # Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8900"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8901"]
