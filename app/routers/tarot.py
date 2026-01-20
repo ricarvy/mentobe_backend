@@ -80,9 +80,16 @@ async def generate_interpretation_stream(user_id: str, request: InterpretRequest
     # Log detailed cards info
     logger.info(f"Cards drawn for user {user_id}:\n{cards_desc}")
     
+    lang_instruction = {
+        "cn": "请使用中文进行解读。请确保各个段落之间保留1-2行的空行，以保持排版清晰。",
+        "en": "Please provide the interpretation in English. Ensure there are 1-2 empty lines between paragraphs for clear formatting.",
+        "jp": "日本語で解釈を提供してください。段落の間には1〜2行の空白行を入れて、読みやすくしてください。"
+    }.get(request.lang, "请使用中文进行解读。请确保各个段落之间保留1-2行的空行，以保持排版清晰。")
+
     user_prompt = f"""
     用户问题: {request.question}
     牌阵: {request.spread.name} - {request.spread.description}
+    语言要求: {lang_instruction}
     
     抽出的牌:
     {cards_desc}
@@ -147,7 +154,12 @@ async def suggest(request: SuggestRequest):
     """
     
     # Mock response
-    suggestion = f"基于您的工作发展问题，我建议您可以继续探索以下方向：\n\n1. 职业技能提升\n2. 扩展人脉网络\n3. 寻找导师指导\n\n鼓励您持续探索！"
+    suggestions_map = {
+        "cn": "基于您的工作发展问题，我建议您可以继续探索以下方向：\n\n1. 职业技能提升\n2. 扩展人脉网络\n3. 寻找导师指导\n\n鼓励您持续探索！",
+        "en": "Based on your question, I suggest you explore the following areas:\n\n1. Skill Development\n2. Networking\n3. Mentorship\n\nKeep exploring!",
+        "jp": "あなたの質問に基づいて、以下の分野を探求することをお勧めします：\n\n1. スキルアップ\n2. 人脈作り\n3. メンターを探す\n\n探求を続けましょう！"
+    }
+    suggestion = suggestions_map.get(request.lang, suggestions_map["cn"])
     return SuccessResponse(data=SuggestResponse(suggestion=suggestion))
 
 @router.get("/history", response_model=SuccessResponse)

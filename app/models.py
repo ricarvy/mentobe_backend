@@ -68,6 +68,7 @@ class InterpretRequest(BaseModel):
     question: str
     spread: Spread
     cards: List[TarotCard]
+    lang: str = "cn" # cn, en, jp
 
 class InterpretationRecord(BaseModel):
     id: str
@@ -82,6 +83,7 @@ class SuggestRequest(BaseModel):
     question: str
     cards: List[TarotCard]
     interpretation: str
+    lang: str = "cn" # cn, en, jp
 
 class SuggestResponse(BaseModel):
     suggestion: str
