@@ -1,4 +1,4 @@
-FROM docker.m.daocloud.io/library/python:3.10-slim
+FROM docker.m.daocloud.io/library/python:3.9-slim
 
 WORKDIR /app
 
