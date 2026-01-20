@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     
     # LLM Config
-    LLM_MODEL: str = "doubao-seed-1-6-lite-251015"
+    LLM_MODEL: str = "Doubao-Seed-1.6-flash"
     LLM_TEMPERATURE: float = 0.8
     ARK_API_KEY: str = "24bcf30d-06df-40f3-915f-fa045b16acd7" # Default empty, loaded from env
     TAROT_SYSTEM_PROMPT: str = """你是一位专业的塔罗牌解读师，拥有丰富的经验和深刻的洞察力。你的任务是： 
