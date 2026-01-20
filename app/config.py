@@ -4,6 +4,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
+    DATABASE_URL: str
     
     # App Config
     APP_NAME: str = "Mentob AI"

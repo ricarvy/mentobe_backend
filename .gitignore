@@ -9,3 +9,4 @@ venv/
 .idea/
 *.log
 deploy.tar.gz
+.env.local

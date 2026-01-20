@@ -6,5 +6,8 @@ pydantic
 pydantic-settings
 requests
 passlib[bcrypt]
+bcrypt==3.2.2
 python-multipart
 email-validator
+sqlalchemy
+psycopg2-binary
