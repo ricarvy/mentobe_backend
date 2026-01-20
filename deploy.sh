@@ -4,21 +4,40 @@
 set -e
 
 APP_NAME="mentobe-backend"
+CONTAINER_NAME="$APP_NAME-container"
 PORT=8901
 
+# 1. Build the Docker image
+# 使用当前目录下的 Dockerfile 构建镜像
 echo "Building Docker image for $APP_NAME..."
 docker build -t $APP_NAME .
 
-echo "Checking for existing container..."
-if [ "$(docker ps -aq -f name=$APP_NAME-container)" ]; then
-    echo "Stopping and removing existing container..."
-    docker stop $APP_NAME-container || true
-    docker rm $APP_NAME-container || true
+# 2. Check for existing container and cleanup
+# 检查是否存在同名容器，如果存在则停止并删除，确保环境纯净
+echo "Checking for existing container: $CONTAINER_NAME..."
+if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
+    echo "Found existing container: $CONTAINER_NAME"
+    
+    echo "Stopping container..."
+    docker stop $CONTAINER_NAME || true
+    
+    echo "Removing container..."
+    docker rm $CONTAINER_NAME || true
+    
+    echo "Existing container removed."
+else
+    echo "No existing container found."
 fi
 
+# 3. Start new container
+# 启动新容器，映射端口，并加载环境变量
 echo "Starting new container on port $PORT..."
+# --name: 指定容器名称
+# -p: 端口映射 (宿主机端口:容器端口)
+# --env-file: 从 .env 文件加载环境变量
+# --restart: 容器退出时的重启策略
 docker run -d \
-  --name $APP_NAME-container \
+  --name $CONTAINER_NAME \
   -p 0.0.0.0:$PORT:8901 \
   --env-file .env \
   --restart unless-stopped \

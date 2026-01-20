@@ -7,6 +7,10 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 
 @router.get("/config", response_model=SuccessResponse)
 async def get_config():
+    """
+    获取后端配置信息接口
+    用于前端调试和检查环境状态
+    """
     return SuccessResponse(data={
         "timestamp": datetime.now().isoformat(),
         "environment": {
@@ -56,6 +60,10 @@ async def get_config():
 
 @router.get("/demo-account", response_model=SuccessResponse)
 async def get_demo_account():
+    """
+    获取演示账号信息接口
+    仅用于开发调试，返回部分脱敏的账号信息
+    """
     pw = settings.DEMO_ACCOUNT_PASSWORD
     masked = "*" * len(pw)
     chars = []

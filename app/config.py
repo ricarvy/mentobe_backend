@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 class Settings(BaseSettings):
@@ -30,8 +30,7 @@ class Settings(BaseSettings):
     DEMO_ACCOUNT_EMAIL: str = "demo@mentobai.com"
     DEMO_ACCOUNT_PASSWORD: str = "Demo123!"
     
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 @lru_cache()
 def get_settings():

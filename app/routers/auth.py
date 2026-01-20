@@ -7,14 +7,25 @@ from app.dependencies import get_current_user, verify_password, get_password_has
 from app.database import supabase
 from app.config import settings
 from datetime import datetime
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=SuccessResponse)
 async def login(request: LoginRequest):
+    """
+    用户登录接口
+    支持演示账号和普通账号
+    """
+    logger.info(f"Login attempt for email: {request.email}")
+    
     # Check demo account
     if settings.DEMO_ACCOUNT_ENABLED and request.email == settings.DEMO_ACCOUNT_EMAIL:
         if request.password == settings.DEMO_ACCOUNT_PASSWORD:
+            logger.info("Demo account login successful")
             return SuccessResponse(data=UserResponse(
                 id="demo-user-id",
                 username="Demo User",
@@ -28,12 +39,15 @@ async def login(request: LoginRequest):
     try:
         response = supabase.table("users").select("*").eq("email", request.email).execute()
         if not response.data:
-             raise HTTPException(status_code=401, detail="Invalid credentials")
+             logger.warning(f"Login failed: User not found for {request.email}")
+             raise HTTPException(status_code=401, detail="邮箱或密码错误")
         
         user_data = response.data[0]
         if not verify_password(request.password, user_data["password"]):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
+            logger.warning(f"Login failed: Invalid password for {request.email}")
+            raise HTTPException(status_code=401, detail="邮箱或密码错误")
             
+        logger.info(f"User {user_data['id']} logged in successfully")
         return SuccessResponse(data=UserResponse(
             id=user_data["id"],
             username=user_data["username"],
@@ -45,15 +59,21 @@ async def login(request: LoginRequest):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Login error: {e}")
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
 
 @router.post("/register", response_model=SuccessResponse)
 async def register(request: RegisterRequest):
+    """
+    用户注册接口
+    """
+    logger.info(f"Register attempt for email: {request.email}")
     try:
         # Check if user exists
         response = supabase.table("users").select("id").eq("email", request.email).execute()
         if response.data:
-            return ErrorResponse(success=False, error={"code": "USER_EXISTS", "message": "Email already exists"})
+            logger.warning(f"Register failed: Email {request.email} already exists")
+            return ErrorResponse(success=False, error={"code": "USER_EXISTS", "message": "该邮箱已被注册"})
             
         hashed_pw = get_password_hash(request.password)
         username = request.email.split("@")[0]
@@ -68,9 +88,12 @@ async def register(request: RegisterRequest):
         
         insert_response = supabase.table("users").insert(new_user).execute()
         if not insert_response.data:
-             raise Exception("Failed to create user")
+             logger.error("Failed to insert user into DB")
+             raise Exception("创建用户失败")
              
         created_user = insert_response.data[0]
+        logger.info(f"User {created_user['id']} registered successfully")
+        
         return SuccessResponse(data=UserResponse(
             id=created_user["id"],
             username=created_user["username"],
@@ -79,6 +102,7 @@ async def register(request: RegisterRequest):
         ))
         
     except Exception as e:
+        logger.error(f"Register error: {e}")
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
 
 @router.get("/quota", response_model=SuccessResponse)

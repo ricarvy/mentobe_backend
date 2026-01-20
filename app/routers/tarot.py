@@ -11,13 +11,21 @@ from app.config import settings
 import asyncio
 import json
 import uuid
+import logging
 from datetime import datetime
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tarot", tags=["tarot"])
 
 async def save_interpretation(user_id: str, request: InterpretRequest, full_text: str):
+    """
+    保存解读结果到数据库，并更新用户今日配额
+    """
     # Save to DB
     try:
+        logger.info(f"Saving interpretation for user {user_id}")
         cards_json = json.dumps([c.dict() for c in request.cards])
         
         record = {
@@ -29,7 +37,7 @@ async def save_interpretation(user_id: str, request: InterpretRequest, full_text
             "created_at": datetime.now().isoformat()
         }
         
-        supabase.table("interpretations").insert(record).execute()
+        supabase.table("tarot_interpretations").insert(record).execute()
         
         # Update quota
         today = datetime.now().strftime("%Y-%m-%d")
@@ -41,16 +49,22 @@ async def save_interpretation(user_id: str, request: InterpretRequest, full_text
         else:
             supabase.table("daily_quotas").insert({"user_id": user_id, "date": today, "count": 1}).execute()
             
+        logger.info(f"Interpretation saved and quota updated for user {user_id}")
+            
     except Exception as e:
+        logger.error(f"Failed to save interpretation: {e}")
         print(f"Failed to save interpretation: {e}")
 
 async def fake_llm_stream(user_id: str, request: InterpretRequest):
+    """
+    模拟 LLM 流式输出，构建 Prompt 并生成解读
+    """
     # Construct the prompt based on the request
     # This aligns with the "System Prompt" requirement implied in backend.md
     
     cards_info = []
     for i, card in enumerate(request.cards):
-        position_name = f"Position {i+1}"
+        position_name = f"位置 {i+1}"
         position_desc = ""
         if i < len(request.spread.positions):
             position_name = request.spread.positions[i].name
@@ -64,6 +78,9 @@ async def fake_llm_stream(user_id: str, request: InterpretRequest):
     
     cards_desc = "\n\n".join(cards_info)
     
+    # Log detailed cards info
+    logger.info(f"Cards drawn for user {user_id}:\n{cards_desc}")
+    
     prompt = f"""
     {settings.TAROT_SYSTEM_PROMPT}
     
@@ -73,17 +90,20 @@ async def fake_llm_stream(user_id: str, request: InterpretRequest):
     抽出的牌:
     {cards_desc}
     """
+    
+    logger.info(f"Generated prompt for user {user_id}: {prompt[:100]}...") # Log first 100 chars
 
     # Simulate thinking and streaming (Mock for now as per current state, but structure is ready for real LLM)
     full_text = ""
     
     # Mock response to match backend.md example style more closely
+    # 这里的 mock response 也可以稍微汉化一下，或者保留 structure
     response_text = f"""
-    Based on your question "{request.question}" and the cards drawn...
+    基于您的问题 "{request.question}" 和抽出的牌面...
     
-    1. **{request.cards[0].name}**: This card represents...
+    1. **{request.cards[0].name}**: 这张牌代表...
     
-    Overall, the situation looks promising.
+    总体来看，情况...
     """
     
     lines = response_text.split('\n')
@@ -94,10 +114,18 @@ async def fake_llm_stream(user_id: str, request: InterpretRequest):
         await asyncio.sleep(0.1) # Simulate delay
         
     # Save after streaming
+    logger.info(f"Interpretation result for user {user_id}:\n{full_text}")
     await save_interpretation(user_id, request, full_text)
 
 @router.post("/interpret")
 async def interpret(request: InterpretRequest, current_user: UserResponse = Depends(get_current_user)):
+    """
+    塔罗牌解读接口
+    1. 检查用户今日配额
+    2. 如果有配额，调用 LLM (模拟) 生成流式响应
+    """
+    logger.info(f"Received interpret request from user {current_user.id}")
+    
     # 1. Check Quota
     if not current_user.unlimitedQuota:
         today = datetime.now().strftime("%Y-%m-%d")
@@ -107,9 +135,11 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
             used = q_res.data[0]["count"]
         
         if used >= 3: # Limit 3
-             return ErrorResponse(success=False, error={"code": "QUOTA_EXCEEDED", "message": "Daily quota exceeded"})
+             logger.warning(f"User {current_user.id} exceeded daily quota")
+             return ErrorResponse(success=False, error={"code": "QUOTA_EXCEEDED", "message": "今日额度已用完"})
 
     # 2. Stream Response
+    logger.info(f"Starting stream for user {current_user.id}")
     return StreamingResponse(fake_llm_stream(current_user.id, request), media_type="text/event-stream")
 
 @router.post("/suggest", response_model=SuccessResponse)
@@ -139,7 +169,7 @@ async def history(userId: str, current_user: UserResponse = Depends(get_current_
         raise HTTPException(status_code=403, detail="Forbidden")
         
     try:
-        response = supabase.table("interpretations")\
+        response = supabase.table("tarot_interpretations")\
             .select("*")\
             .eq("user_id", userId)\
             .order("created_at", desc=True)\
