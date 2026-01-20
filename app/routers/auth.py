@@ -6,6 +6,7 @@ from app.models import (
 from app.dependencies import get_current_user, verify_password, get_password_hash
 from app.database import supabase
 from app.config import settings
+from app.services.quota import QuotaService
 from datetime import datetime
 import logging
 
@@ -83,7 +84,8 @@ async def register(request: RegisterRequest):
             "password": hashed_pw,
             "username": username,
             "is_active": True,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
+            "quota": 3 # Initialize with default quota
         }
         
         insert_response = supabase.table("users").insert(new_user).execute()

@@ -9,10 +9,30 @@ class QuotaService:
     DAILY_LIMIT = 3
 
     @staticmethod
+    async def _check_and_reset_daily_quota(user_id: str):
+        """
+        Check if quota needs to be reset for the new day.
+        If no record exists in daily_quotas for today, reset users.quota to 3 and insert daily record.
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # Check daily_quotas table for today's record (as a flag)
+        response = supabase.table("daily_quotas").select("id").eq("user_id", user_id).eq("date", today).execute()
+        
+        if not response.data:
+            logger.info(f"New day detected for user {user_id}. Resetting quota to {QuotaService.DAILY_LIMIT}.")
+            # 1. Reset users.quota to 3
+            supabase.table("users").update({"quota": QuotaService.DAILY_LIMIT}).eq("id", user_id).execute()
+            # 2. Insert record into daily_quotas to mark today as initialized
+            # We don't strictly need 'count' anymore if we trust users.quota, but let's keep it for logging/flagging
+            # Or we can just use it as a flag. count=0 is fine.
+            supabase.table("daily_quotas").insert({"user_id": user_id, "date": today, "count": 0}).execute()
+
+    @staticmethod
     async def get_user_quota(user_id: str, is_demo: bool = False) -> QuotaResponse:
         """
-        Get user's current quota status.
-        Resets to 3 if it's a new day (implied by no record for today).
+        Get user's current quota status from users table.
+        Auto-resets if it's a new day.
         """
         if is_demo:
             return QuotaResponse(
@@ -23,17 +43,21 @@ class QuotaService:
             )
 
         try:
-            today = datetime.now().strftime("%Y-%m-%d")
+            # Check and reset if needed
+            await QuotaService._check_and_reset_daily_quota(user_id)
             
-            # Check daily_quotas table
-            response = supabase.table("daily_quotas").select("*").eq("user_id", user_id).eq("date", today).execute()
+            # Get quota from users table
+            u_res = supabase.table("users").select("quota").eq("id", user_id).execute()
             
-            used = 0
-            if response.data:
-                used = response.data[0]["count"]
+            remaining = 0
+            if u_res.data:
+                # Default to 0 if null, though should be 3 if reset
+                remaining = u_res.data[0].get("quota", 0)
+                if remaining is None: remaining = 0 # Safety
             
-            # Logic: New day (no record) -> used=0 -> remaining=3
-            remaining = max(0, QuotaService.DAILY_LIMIT - used)
+            # Calculated used (approximation, since we don't strictly track 'used' in this new logic, only remaining)
+            # But for display: Total - Remaining = Used
+            used = max(0, QuotaService.DAILY_LIMIT - remaining)
             
             return QuotaResponse(
                 remaining=remaining,
@@ -43,40 +67,46 @@ class QuotaService:
             )
         except Exception as e:
             logger.error(f"Error getting quota for user {user_id}: {e}")
-            # Fallback to 0 remaining to be safe, or 3 if we assume error shouldn't block?
-            # Safe approach: return 0 or raise
             raise e
 
     @staticmethod
     async def reduce_quota(user_id: str) -> bool:
         """
-        Reduce user's quota by 1.
+        Reduce user's quota by 1 in users table.
         Returns True if successful, False if quota exceeded.
-        Handles the 'reset to 3' logic implicitly by creating a new daily record if none exists.
         """
         try:
-            today = datetime.now().strftime("%Y-%m-%d")
+            # Check and reset if needed
+            await QuotaService._check_and_reset_daily_quota(user_id)
             
-            # Check current usage
-            response = supabase.table("daily_quotas").select("*").eq("user_id", user_id).eq("date", today).execute()
+            # Check current quota
+            u_res = supabase.table("users").select("quota").eq("id", user_id).execute()
             
-            current_count = 0
-            record_id = None
+            current_quota = 0
+            if u_res.data:
+                current_quota = u_res.data[0].get("quota", 0)
+                if current_quota is None: current_quota = 0
             
-            if response.data:
-                current_count = response.data[0]["count"]
-                record_id = response.data[0]["id"]
-            
-            if current_count >= QuotaService.DAILY_LIMIT:
-                logger.warning(f"User {user_id} quota exceeded")
+            if current_quota <= 0:
+                logger.warning(f"User {user_id} quota exhausted")
                 return False
             
-            # Update or Insert
-            if record_id:
-                supabase.table("daily_quotas").update({"count": current_count + 1}).eq("id", record_id).execute()
-            else:
-                # New day or new user -> Start with 1 used (effectively reset to 3 then used 1)
-                supabase.table("daily_quotas").insert({"user_id": user_id, "date": today, "count": 1}).execute()
+            # Reduce by 1
+            new_quota = current_quota - 1
+            supabase.table("users").update({"quota": new_quota}).eq("id", user_id).execute()
+            
+            # Optionally update daily_quotas count for history/stats if desired
+            # But user requirement focuses on users.quota. Let's keep daily_quotas as just a date flag or stats.
+            # Let's increment daily_quotas count too for good measure (stats)
+            today = datetime.now().strftime("%Y-%m-%d")
+            # We know it exists because of _check_and_reset_daily_quota
+            # But to be safe (race condition?), just try update
+            # Getting the id first is safer or just use match
+            dq_res = supabase.table("daily_quotas").select("id, count").eq("user_id", user_id).eq("date", today).execute()
+            if dq_res.data:
+                d_id = dq_res.data[0]["id"]
+                d_count = dq_res.data[0]["count"]
+                supabase.table("daily_quotas").update({"count": d_count + 1}).eq("id", d_id).execute()
                 
             return True
             
@@ -87,16 +117,21 @@ class QuotaService:
     @staticmethod
     async def initialize_quota(user_id: str):
         """
-        Explicitly initialize quota for a new user (Optional).
-        Sets count to 0 for today.
+        Explicitly initialize quota for a new user.
+        Sets users.quota = 3 and creates daily record.
         """
         try:
             today = datetime.now().strftime("%Y-%m-%d")
-            # Check if exists (should not for new user, but safety first)
+            
+            # 1. Set users.quota = 3
+            # (If not already set by default value in DB)
+            supabase.table("users").update({"quota": QuotaService.DAILY_LIMIT}).eq("id", user_id).execute()
+            
+            # 2. Create daily record
             response = supabase.table("daily_quotas").select("*").eq("user_id", user_id).eq("date", today).execute()
             if not response.data:
                  supabase.table("daily_quotas").insert({"user_id": user_id, "date": today, "count": 0}).execute()
+                 
         except Exception as e:
             logger.error(f"Error initializing quota for user {user_id}: {e}")
-            # Non-critical, swallow error
             pass
