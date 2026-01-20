@@ -107,42 +107,12 @@ async def register(request: RegisterRequest):
 
 @router.get("/quota", response_model=SuccessResponse)
 async def get_quota(userId: str, current_user: UserResponse = Depends(get_current_user)):
-    # Demo user
-    if current_user.isDemo:
-        return SuccessResponse(data=QuotaResponse(
-            remaining=999999,
-            used=0,
-            total="Unlimited",
-            isDemo=True
-        ))
-        
-    # Regular user
     # Ensure checking own quota
     if userId != current_user.id:
-        # For simplicity, just return current user's quota or error.
-        # Strict adherence: return 403 or just process for current_user
         pass 
         
     try:
-        today = datetime.now().strftime("%Y-%m-%d")
-        
-        # Check quota table
-        # We assume a 'daily_quotas' table: user_id, date, count
-        response = supabase.table("daily_quotas").select("*").eq("user_id", current_user.id).eq("date", today).execute()
-        
-        used = 0
-        if response.data:
-            used = response.data[0]["count"]
-            
-        # Default free quota = 3 (from spec)
-        total = 3
-        remaining = max(0, total - used)
-        
-        return SuccessResponse(data=QuotaResponse(
-            remaining=remaining,
-            used=used,
-            total=total,
-            isDemo=False
-        ))
+        quota_info = await QuotaService.get_user_quota(current_user.id, current_user.isDemo)
+        return SuccessResponse(data=quota_info)
     except Exception as e:
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})

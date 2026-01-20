@@ -9,6 +9,7 @@ from app.dependencies import get_current_user
 from app.database import supabase
 from app.config import settings
 from app.services.llm import stream_tarot_interpretation
+from app.services.quota import QuotaService
 import asyncio
 import json
 import uuid
@@ -122,13 +123,8 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
     
     # 1. Check Quota
     if not current_user.unlimitedQuota:
-        today = datetime.now().strftime("%Y-%m-%d")
-        q_res = supabase.table("daily_quotas").select("*").eq("user_id", current_user.id).eq("date", today).execute()
-        used = 0
-        if q_res.data:
-            used = q_res.data[0]["count"]
-        
-        if used >= 3: # Limit 3
+        quota_info = await QuotaService.get_user_quota(current_user.id)
+        if quota_info.remaining <= 0:
              logger.warning(f"User {current_user.id} exceeded daily quota")
              return ErrorResponse(success=False, error={"code": "QUOTA_EXCEEDED", "message": "今日额度已用完"})
 
