@@ -11,8 +11,9 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     
     # LLM Config
-    LLM_MODEL: str = "doubao-seed-1-6-thinking-250715"
+    LLM_MODEL: str = "doubao-seed-1-6-lite-251015"
     LLM_TEMPERATURE: float = 0.8
+    ARK_API_KEY: str = "24bcf30d-06df-40f3-915f-fa045b16acd7" # Default empty, loaded from env
     TAROT_SYSTEM_PROMPT: str = """你是一位专业的塔罗牌解读师，拥有丰富的经验和深刻的洞察力。你的任务是： 
 1. 根据用户的问题和抽出的牌面，提供专业、深入、有启发性的解读 
 2. 结合每张牌的含义和位置，分析它们之间的关联和整体含义 

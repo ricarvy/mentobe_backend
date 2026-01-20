@@ -8,6 +8,7 @@ from app.models import (
 from app.dependencies import get_current_user
 from app.database import supabase
 from app.config import settings
+from app.services.llm import stream_tarot_interpretation
 import asyncio
 import json
 import uuid
@@ -55,13 +56,11 @@ async def save_interpretation(user_id: str, request: InterpretRequest, full_text
         logger.error(f"Failed to save interpretation: {e}")
         print(f"Failed to save interpretation: {e}")
 
-async def fake_llm_stream(user_id: str, request: InterpretRequest):
+async def generate_interpretation_stream(user_id: str, request: InterpretRequest):
     """
-    模拟 LLM 流式输出，构建 Prompt 并生成解读
+    生成 Prompt 并调用真实 LLM 获取解读
     """
     # Construct the prompt based on the request
-    # This aligns with the "System Prompt" requirement implied in backend.md
-    
     cards_info = []
     for i, card in enumerate(request.cards):
         position_name = f"位置 {i+1}"
@@ -81,9 +80,7 @@ async def fake_llm_stream(user_id: str, request: InterpretRequest):
     # Log detailed cards info
     logger.info(f"Cards drawn for user {user_id}:\n{cards_desc}")
     
-    prompt = f"""
-    {settings.TAROT_SYSTEM_PROMPT}
-    
+    user_prompt = f"""
     用户问题: {request.question}
     牌阵: {request.spread.name} - {request.spread.description}
     
@@ -91,30 +88,20 @@ async def fake_llm_stream(user_id: str, request: InterpretRequest):
     {cards_desc}
     """
     
-    logger.info(f"Generated prompt for user {user_id}: {prompt[:100]}...") # Log first 100 chars
+    messages = [
+        {"role": "system", "content": settings.TAROT_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt}
+    ]
+    
+    logger.info(f"Calling LLM for user {user_id}")
 
-    # Simulate thinking and streaming (Mock for now as per current state, but structure is ready for real LLM)
     full_text = ""
-    
-    # Mock response to match backend.md example style more closely
-    # 这里的 mock response 也可以稍微汉化一下，或者保留 structure
-    response_text = f"""
-    基于您的问题 "{request.question}" 和抽出的牌面...
-    
-    1. **{request.cards[0].name}**: 这张牌代表...
-    
-    总体来看，情况...
-    """
-    
-    lines = response_text.split('\n')
-    for line in lines:
-        chunk = line + "\n"
+    async for chunk in stream_tarot_interpretation(messages):
         full_text += chunk
         yield chunk
-        await asyncio.sleep(0.1) # Simulate delay
         
     # Save after streaming
-    logger.info(f"Interpretation result for user {user_id}:\n{full_text}")
+    logger.info(f"Interpretation result for user {user_id} completed. Length: {len(full_text)}")
     await save_interpretation(user_id, request, full_text)
 
 @router.post("/interpret")
@@ -122,7 +109,7 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
     """
     塔罗牌解读接口
     1. 检查用户今日配额
-    2. 如果有配额，调用 LLM (模拟) 生成流式响应
+    2. 如果有配额，调用 LLM 生成流式响应
     """
     logger.info(f"Received interpret request from user {current_user.id}")
     
@@ -140,7 +127,7 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
 
     # 2. Stream Response
     logger.info(f"Starting stream for user {current_user.id}")
-    return StreamingResponse(fake_llm_stream(current_user.id, request), media_type="text/event-stream")
+    return StreamingResponse(generate_interpretation_stream(current_user.id, request), media_type="text/event-stream")
 
 @router.post("/suggest", response_model=SuccessResponse)
 async def suggest(request: SuggestRequest):

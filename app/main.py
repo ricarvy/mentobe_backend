@@ -4,6 +4,46 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import auth, tarot, debug, system
 from app.config import settings
 import os
+import logging
+import sys
+from datetime import datetime
+
+# Setup Logging
+def setup_logging():
+    # Create logs directory
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Log filename with date
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    log_file = os.path.join(log_dir, f"{current_date}.log")
+    
+    # Configure logging
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    stream_handler = logging.StreamHandler(sys.stdout)
+    
+    # Define format
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[file_handler, stream_handler],
+        force=True
+    )
+    
+    # Ensure uvicorn loggers also write to file
+    # uvicorn.error and uvicorn.access are the main loggers.
+    # Attaching to "uvicorn" might cause duplication if children propagate.
+    for logger_name in ["uvicorn.access", "uvicorn.error"]:
+        logger = logging.getLogger(logger_name)
+        logger.addHandler(file_handler)
+    
+    logging.info(f"Logging initialized. Writing to {log_file}")
+
+setup_logging()
 
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
 
