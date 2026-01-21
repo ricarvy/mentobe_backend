@@ -206,7 +206,8 @@ async def handle_checkout_completed(session: dict):
 
         update_data = {
             "vip_level": vip_level,
-            "vip_expire_at": new_expire_at.isoformat()
+            "vip_expire_at": new_expire_at.isoformat(),
+            "quota": 999999
         }
 
         supabase.table("users").update(update_data).eq("id", user_id).execute()

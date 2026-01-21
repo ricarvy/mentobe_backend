@@ -45,6 +45,7 @@ docker run -d \
   --name $CONTAINER_NAME \
   -p 0.0.0.0:$PORT:8901 \
   --env-file .env \
+  -v $(pwd)/logs:/app/logs \
   --restart unless-stopped \
   $APP_NAME
 
