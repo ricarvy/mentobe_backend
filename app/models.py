@@ -36,6 +36,8 @@ class UserResponse(BaseModel):
     isActive: bool
     isDemo: Optional[bool] = False
     unlimitedQuota: Optional[bool] = False
+    vipLevel: Optional[int] = 0
+    vipExpireAt: Optional[datetime] = None
 
 # Tarot Models
 class TarotCard(BaseModel):

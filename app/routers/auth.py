@@ -27,14 +27,57 @@ async def login(request: LoginRequest):
     if settings.DEMO_ACCOUNT_ENABLED and request.email == settings.DEMO_ACCOUNT_EMAIL:
         if request.password == settings.DEMO_ACCOUNT_PASSWORD:
             logger.info("Demo account login successful")
-            return SuccessResponse(data=UserResponse(
-                id="demo-user-id",
-                username="Demo User",
-                email=request.email,
-                isActive=True,
-                isDemo=True,
-                unlimitedQuota=True
-            ))
+            
+            # Sync demo user to DB to ensure foreign key constraints work for payments
+            try:
+                # Check if demo user exists (using a fixed UUID for demo user to be consistent)
+                demo_uuid = "00000000-0000-0000-0000-000000000000" 
+                resp = supabase.table("users").select("*").eq("id", demo_uuid).execute()
+                
+                if not resp.data:
+                    # Create demo user if not exists
+                    demo_user = {
+                        "id": demo_uuid,
+                        "email": request.email,
+                        "password": get_password_hash(request.password),
+                        "username": "Demo User",
+                        "is_active": True,
+                        "created_at": datetime.now().isoformat(),
+                        "quota": 999999,
+                        "vip_level": 0
+                    }
+                    supabase.table("users").insert(demo_user).execute()
+                    logger.info("Demo user created in DB")
+                else:
+                    # Ensure it's active and has correct email
+                    # Also fetch latest VIP status
+                    pass
+                
+                # Fetch latest data to return correct VIP status
+                resp = supabase.table("users").select("*").eq("id", demo_uuid).execute()
+                user_data = resp.data[0]
+                
+                return SuccessResponse(data=UserResponse(
+                    id=user_data["id"],
+                    username=user_data["username"],
+                    email=user_data["email"],
+                    isActive=user_data.get("is_active", True),
+                    isDemo=True,
+                    unlimitedQuota=True,
+                    vipLevel=user_data.get("vip_level", 0),
+                    vipExpireAt=user_data.get("vip_expire_at")
+                ))
+            except Exception as e:
+                logger.error(f"Failed to sync demo user to DB: {e}")
+                # Fallback to in-memory response if DB fails, though payments might fail
+                return SuccessResponse(data=UserResponse(
+                    id="demo-user-id",
+                    username="Demo User",
+                    email=request.email,
+                    isActive=True,
+                    isDemo=True,
+                    unlimitedQuota=True
+                ))
     
     # Check DB
     try:
@@ -55,7 +98,9 @@ async def login(request: LoginRequest):
             email=user_data["email"],
             isActive=user_data.get("is_active", True),
             isDemo=False,
-            unlimitedQuota=False
+            unlimitedQuota=False,
+            vipLevel=user_data.get("vip_level", 0),
+            vipExpireAt=user_data.get("vip_expire_at")
         ))
     except HTTPException:
         raise
