@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = "sk_test_51SreWwGVP93aj81To6Xp9DreJPPieqnIfmDhBAQkAJFjdDCTNfsvUT6JVAC4t5dEYsw6jPaajFNJQDomcH6Q6YN200XwCuruCx"
     STRIPE_WEBHOOK_SECRET: str = "whsec_NUd81BfIEM2COWvsOYcksNRnuqKpRhug"
     STRIPE_API_BASE: str = "https://api.stripe.com"
+
+    # Stripe Prices
+    NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY: str = ""
+    NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY: str = ""
+    NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY: str = ""
+    NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY: str = ""
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

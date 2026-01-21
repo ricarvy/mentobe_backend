@@ -15,6 +15,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
 
+@router.get("/config", response_model=SuccessResponse)
+async def get_stripe_config():
+    """
+    获取 Stripe 配置（公开价格 ID）
+    """
+    return SuccessResponse(data={
+        "prices": {
+            "pro_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
+            "pro_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY,
+            "premium_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY,
+            "premium_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY,
+        }
+    })
+
 @router.post("/create-checkout-session", response_model=SuccessResponse)
 async def create_checkout_session(request: CreateCheckoutSessionRequest):
     """
@@ -25,6 +39,17 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
 
     logger.info(f"[Stripe API] Creating checkout session for user: {request.user_id}")
 
+    # Determine mode based on price_id
+    mode = "payment"
+    subscription_prices = [
+        settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
+        settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY,
+        settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY,
+        settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY
+    ]
+    if request.price_id in subscription_prices:
+        mode = "subscription"
+
     try:
         async with httpx.AsyncClient() as client:
             stripe_response = await client.post(
@@ -34,8 +59,8 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
                     "Content-Type": "application/x-www-form-urlencoded",
                 },
                 data={
-                    "mode": "payment",
-                    "payment_method_types": "card",
+                    "mode": mode,
+                    "payment_method_types[0]": "card",
                     "line_items[0][price]": request.price_id,
                     "line_items[0][quantity]": 1,
                     "success_url": request.success_url,

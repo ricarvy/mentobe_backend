@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stripe Payment Test</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+        label { display: block; margin-top: 10px; }
+        input, select { width: 100%; padding: 8px; margin-top: 5px; }
+        button { background: #6772e5; color: white; border: none; padding: 10px 20px; cursor: pointer; margin-top: 10px; border-radius: 4px; }
+        button:hover { background: #5469d4; }
+        .hidden { display: none; }
+        #message { margin-top: 10px; padding: 10px; border-radius: 4px; }
+        .error { background-color: #ffefef; color: #d32f2f; }
+        .success { background-color: #e8f5e9; color: #2e7d32; }
+    </style>
+</head>
+<body>
+    <h1>Stripe Payment Test</h1>
+
+    <div id="auth-section" class="section">
+        <h2>Login</h2>
+        <label>Email: <input type="email" id="email" value="demo@mentobai.com"></label>
+        <label>Password: <input type="password" id="password" value="Demo123!"></label>
+        <button onclick="login()">Login</button>
+        <p id="auth-status"></p>
+    </div>
+
+    <div id="payment-section" class="section hidden">
+        <h2>Purchase Quota</h2>
+        <div id="user-info"></div>
+        
+        <label>Select Product:
+            <select id="price-id">
+                <option>Loading prices...</option>
+            </select>
+        </label>
+
+        <button onclick="checkout()">Checkout</button>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let credentials = null;
+
+        // Fetch prices on load
+        async function fetchConfig() {
+            try {
+                const res = await fetch('/api/stripe/config');
+                const data = await res.json();
+                if (data.success) {
+                    const prices = data.data.prices;
+                    const select = document.getElementById('price-id');
+                    select.innerHTML = `
+                        <option value="${prices.pro_monthly}">Pro Monthly (${prices.pro_monthly})</option>
+                        <option value="${prices.pro_yearly}">Pro Yearly (${prices.pro_yearly})</option>
+                        <option value="${prices.premium_monthly}">Premium Monthly (${prices.premium_monthly})</option>
+                        <option value="${prices.premium_yearly}">Premium Yearly (${prices.premium_yearly})</option>
+                    `;
+                }
+            } catch (e) {
+                console.error("Failed to fetch config", e);
+                document.getElementById('price-id').innerHTML = '<option>Error loading prices</option>';
+            }
+        }
+        
+        fetchConfig();
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    currentUser = data.data;
+                    credentials = btoa(email + ':' + password);
+                    document.getElementById('auth-status').innerText = 'Logged in as ' + currentUser.username;
+                    document.getElementById('auth-status').style.color = 'green';
+                    document.getElementById('payment-section').classList.remove('hidden');
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('user-info').innerText = `User ID: ${currentUser.id} | Email: ${currentUser.email}`;
+                } else {
+                    document.getElementById('auth-status').innerText = 'Error: ' + data.error.message;
+                    document.getElementById('auth-status').style.color = 'red';
+                }
+            } catch (e) {
+                document.getElementById('auth-status').innerText = 'Network Error: ' + e.message;
+            }
+        }
+
+        async function checkout() {
+            const priceId = document.getElementById('price-id').value;
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerText = 'Creating checkout session...';
+            messageDiv.className = '';
+
+            try {
+                const res = await fetch('/api/stripe/create-checkout-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Basic ' + credentials
+                    },
+                    body: JSON.stringify({
+                        price_id: priceId,
+                        success_url: window.location.origin + '/payment.html?success=true',
+                        cancel_url: window.location.origin + '/payment.html?canceled=true',
+                        user_id: currentUser.id,
+                        user_email: currentUser.email
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    window.location.href = data.data.url;
+                } else {
+                    messageDiv.innerText = 'Error: ' + data.error.message;
+                    messageDiv.className = 'error';
+                }
+            } catch (e) {
+                messageDiv.innerText = 'Network Error: ' + e.message;
+                messageDiv.className = 'error';
+            }
+        }
+
+        // Check for URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('success')) {
+            document.getElementById('message').innerText = 'Payment Successful! Your quota will be updated shortly.';
+            document.getElementById('message').className = 'success';
+        } else if (urlParams.get('canceled')) {
+            document.getElementById('message').innerText = 'Payment Canceled.';
+            document.getElementById('message').className = 'error';
+        }
+    </script>
+</body>
+</html>
