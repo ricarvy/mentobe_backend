@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     DEMO_ACCOUNT_ENABLED: bool = True
     DEMO_ACCOUNT_EMAIL: str = "demo@mentobai.com"
     DEMO_ACCOUNT_PASSWORD: str = "Demo123!"
+
+    # Stripe Config
+    STRIPE_SECRET_KEY: str = "sk_test_51SreWwGVP93aj81To6Xp9DreJPPieqnIfmDhBAQkAJFjdDCTNfsvUT6JVAC4t5dEYsw6jPaajFNJQDomcH6Q6YN200XwCuruCx"
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_API_BASE: str = "https://api.stripe.com"
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

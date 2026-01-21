@@ -61,6 +61,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(tarot.router, prefix="/api")
 app.include_router(debug.router, prefix="/api")
 app.include_router(system.router, prefix="/api") # /api/init
+app.include_router(stripe.router, prefix="/api")
 
 # Static files (Web Interface)
 # Ensure static directory exists

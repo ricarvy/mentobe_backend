@@ -97,3 +97,18 @@ class QuotaResponse(BaseModel):
     used: int
     total: Union[int, str]
     isDemo: bool
+
+# Stripe Models
+class CreateCheckoutSessionRequest(BaseModel):
+    price_id: str = Field(..., alias="priceId")
+    user_id: str = Field(..., alias="userId")
+    user_email: EmailStr = Field(..., alias="userEmail")
+    success_url: str = Field(..., alias="successUrl")
+    cancel_url: str = Field(..., alias="cancelUrl")
+
+    class Config:
+        populate_by_name = True
+
+class CheckoutSessionResponse(BaseModel):
+    session_id: str = Field(..., alias="sessionId")
+    url: str

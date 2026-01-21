@@ -12,3 +12,4 @@ email-validator
 sqlalchemy
 psycopg2-binary
 openai
+httpx
