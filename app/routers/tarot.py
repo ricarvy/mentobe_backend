@@ -42,14 +42,13 @@ async def save_interpretation(user_id: str, request: InterpretRequest, full_text
         supabase.table("tarot_interpretations").insert(record).execute()
         
         # Update quota
-        today = datetime.now().strftime("%Y-%m-%d")
-        # Check if quota record exists
-        q_res = supabase.table("daily_quotas").select("*").eq("user_id", user_id).eq("date", today).execute()
-        if q_res.data:
-            current_count = q_res.data[0]["count"]
-            supabase.table("daily_quotas").update({"count": current_count + 1}).eq("id", q_res.data[0]["id"]).execute()
-        else:
-            supabase.table("daily_quotas").insert({"user_id": user_id, "date": today, "count": 1}).execute()
+        # Use QuotaService to reduce quota (updates users.quota and daily_quotas stats)
+        try:
+            success = await QuotaService.reduce_quota(user_id)
+            if not success:
+                logger.warning(f"Quota reduction returned False for user {user_id} after saving interpretation")
+        except Exception as qe:
+            logger.error(f"Failed to reduce quota for user {user_id}: {qe}")
             
         logger.info(f"Interpretation saved and quota updated for user {user_id}")
             

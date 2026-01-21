@@ -30,6 +30,7 @@
     <div id="app-section" class="section hidden">
         <h2>Tarot Interpretation</h2>
         <div id="user-info"></div>
+        <div id="quota-display" style="margin-top: 10px; font-weight: bold;"></div>
         
         <label>Question: <textarea id="question" rows="3">What is my career outlook?</textarea></label>
         
@@ -70,12 +71,43 @@
                     document.getElementById('auth-status').style.color = 'green';
                     document.getElementById('app-section').classList.remove('hidden');
                     document.getElementById('auth-section').classList.add('hidden');
+                    fetchQuota();
                 } else {
                     document.getElementById('auth-status').innerText = 'Error: ' + data.error.message;
                     document.getElementById('auth-status').style.color = 'red';
                 }
             } catch (e) {
                 document.getElementById('auth-status').innerText = 'Network Error: ' + e.message;
+            }
+        }
+
+        async function fetchQuota() {
+            if (!currentUser) return;
+            try {
+                const res = await fetch(`/api/auth/quota?userId=${currentUser.id}`, {
+                     headers: { 'Authorization': 'Basic ' + credentials }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const quota = data.data;
+                    const quotaDiv = document.getElementById('quota-display');
+                    quotaDiv.innerText = `Quota: ${quota.remaining} / ${quota.total}`;
+                    
+                    const interpretBtn = document.querySelector('button[onclick="interpret()"]');
+                    if (quota.remaining <= 0 && quota.total !== 'Unlimited') {
+                        interpretBtn.disabled = true;
+                        interpretBtn.innerText = 'Interpret (Quota Exceeded)';
+                        interpretBtn.style.backgroundColor = '#ccc';
+                        interpretBtn.style.cursor = 'not-allowed';
+                    } else {
+                        interpretBtn.disabled = false;
+                        interpretBtn.innerText = 'Interpret (Stream)';
+                        interpretBtn.style.backgroundColor = '#007bff';
+                        interpretBtn.style.cursor = 'pointer';
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch quota", e);
             }
         }
 
@@ -129,6 +161,9 @@
                     const text = decoder.decode(value);
                     resultDiv.innerText += text;
                 }
+                
+                // Refresh quota after interpretation
+                await fetchQuota();
                 
             } catch (e) {
                 resultDiv.innerText = 'Error: ' + e.message;
