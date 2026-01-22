@@ -36,7 +36,7 @@ async def main():
         if payments_resp.data:
             print(f"Recent Payments ({len(payments_resp.data)}):")
             for p in payments_resp.data:
-                print(f" - ID: {p['id']}, Amount: {p['amount']}, Status: {p['status']}, Created: {p['created_at']}")
+                print(f" - ID: {p['id']}, Amount: {p.get('amount_total')}, Status: {p['status']}, Created: {p['created_at']}")
         else:
             print("No payments found for this user.")
 

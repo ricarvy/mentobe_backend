@@ -178,6 +178,7 @@ async def handle_checkout_completed(session: dict):
     
     try:
         supabase.table("payments").insert(payment_data).execute()
+        print(f"✅ [Payment Updated] User: {user_id}, Amount: {payment_data['amount_total']}, Status: {payment_data['status']}")
         logger.info(f"Payment recorded for user {user_id}")
     except Exception as e:
         logger.error(f"Failed to record payment: {e}")
@@ -211,6 +212,7 @@ async def handle_checkout_completed(session: dict):
         }
 
         supabase.table("users").update(update_data).eq("id", user_id).execute()
+        print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
         logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
     except Exception as e:
         logger.error(f"Failed to update user VIP status: {e}")
