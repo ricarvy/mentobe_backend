@@ -18,16 +18,20 @@ echo "Building Docker image for $APP_NAME..."
 docker build -t $APP_NAME .
 
 # 2. Check for existing container and cleanup
+# 检查端口占用
+echo "Checking if port $PORT is occupied..."
+if [ "$(docker ps -q --filter "publish=$PORT")" ]; then
+    echo "Port $PORT is occupied. Removing container..."
+    docker rm -f $(docker ps -q --filter "publish=$PORT")
+fi
+
 # 检查是否存在同名容器，如果存在则停止并删除，确保环境纯净
 echo "Checking for existing container: $CONTAINER_NAME..."
 if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
     echo "Found existing container: $CONTAINER_NAME"
     
-    echo "Stopping container..."
-    docker stop $CONTAINER_NAME || true
-    
     echo "Removing container..."
-    docker rm $CONTAINER_NAME || true
+    docker rm -f $CONTAINER_NAME || true
     
     echo "Existing container removed."
 else

@@ -55,11 +55,16 @@ fi
 print_info "正在构建 Docker 镜像..."
 docker build -t "$IMAGE_NAME" .
 
+# 检查端口占用并清理
+if [ "$(docker ps -q --filter "publish=$PORT")" ]; then
+    print_info "端口 $PORT 被占用，正在清理占用端口的容器..."
+    docker rm -f $(docker ps -q --filter "publish=$PORT")
+fi
+
 # 停止并删除旧容器
 if [ "$(docker ps -aq -f name=$CONTAINER_NAME)" ]; then
     print_info "正在停止并删除现有容器..."
-    docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
-    docker rm "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 fi
 
 # 运行容器
