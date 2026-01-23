@@ -1,47 +1,52 @@
-import asyncio
-from supabase import create_client, Client
+import sys
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(url, key)
+from app.database import SessionLocal
+from app.db_models import User, Payment
+from sqlalchemy import text
 
-async def main():
-    print("Checking 'payments' table...")
+def main():
+    db = SessionLocal()
     try:
+        print("Checking 'payments' table...")
         # Try to select from payments table
-        response = supabase.table("payments").select("*").limit(1).execute()
+        payments = db.query(Payment).limit(1).all()
         print("Payments table exists.")
-        print(f"Data: {response.data}")
-    except Exception as e:
-        print(f"Error accessing payments table: {e}")
+        if payments:
+            for p in payments:
+                print(f"Data: ID={p.id}, Amount={p.amount_total}, Status={p.status}")
+        else:
+            print("No payments found yet.")
 
-    print("\nChecking 'users' table columns...")
-    try:
+        print("\nChecking 'users' table columns...")
         # Check Demo User specifically
         user_id = "00000000-0000-0000-0000-000000000000"
         print(f"Checking Demo User {user_id}...")
-        response = supabase.table("users").select("id, email, quota, vip_level, vip_expire_at").eq("id", user_id).execute()
-        if response.data:
-            print(f"User Data: {response.data[0]}")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            print(f"User Data: ID={user.id}, Email={user.email}, Quota={user.quota}, VIP Level={user.vip_level}, Expire={user.vip_expire_at}")
         else:
             print("Demo User not found.")
             
         # Check payments for this user
         print(f"\nChecking payments for user {user_id}...")
-        payments_resp = supabase.table("payments").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
-        if payments_resp.data:
-            print(f"Recent Payments ({len(payments_resp.data)}):")
-            for p in payments_resp.data:
-                print(f" - ID: {p['id']}, Amount: {p.get('amount_total')}, Status: {p['status']}, Created: {p['created_at']}")
+        user_payments = db.query(Payment).filter(Payment.user_id == user_id).order_by(Payment.created_at.desc()).limit(5).all()
+        
+        if user_payments:
+            print(f"Recent Payments ({len(user_payments)}):")
+            for p in user_payments:
+                print(f" - ID: {p.id}, Amount: {p.amount_total}, Status: {p.status}, Created: {p.created_at}")
         else:
             print("No payments found for this user.")
 
     except Exception as e:
-        print(f"Error accessing users table VIP columns: {e}")
+        print(f"Error accessing database: {e}")
+    finally:
+        db.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

@@ -2,8 +2,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 class Settings(BaseSettings):
-    # SUPABASE_URL: str # Removed
-    # SUPABASE_KEY: str # Removed
     DATABASE_URL: str
     
     # App Config
