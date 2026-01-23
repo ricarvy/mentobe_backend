@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .env
+.env.local
 .venv
 env/
 venv/
@@ -9,4 +10,4 @@ venv/
 .idea/
 *.log
 deploy.tar.gz
-.env.local
+ps_output.txt

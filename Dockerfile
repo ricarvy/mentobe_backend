@@ -1,11 +1,14 @@
-FROM docker.m.daocloud.io/library/python:3.9-slim
+FROM python:3.9-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# 复制海外环境变量为本地配置 (因为 config.py 指定了 .env.local)
+COPY .env.oversea.prod .env.local
 
 # Expose the port
 EXPOSE 8901

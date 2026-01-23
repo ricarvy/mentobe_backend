@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY: str = ""
     NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY: str = ""
     
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env.local", extra="ignore")
 
 @lru_cache()
 def get_settings():
