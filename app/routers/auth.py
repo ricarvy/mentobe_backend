@@ -4,7 +4,9 @@ from app.models import (
     SuccessResponse, ErrorResponse, QuotaResponse
 )
 from app.dependencies import get_current_user, verify_password, get_password_hash
-from app.database import supabase
+from app.database import get_db, SessionLocal
+from sqlalchemy.orm import Session
+from app.db_models import User
 from app.config import settings
 from app.services.quota import QuotaService
 from datetime import datetime
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=SuccessResponse)
-async def login(request: LoginRequest):
+def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
     用户登录接口
     支持演示账号和普通账号
@@ -32,40 +34,37 @@ async def login(request: LoginRequest):
             try:
                 # Check if demo user exists (using a fixed UUID for demo user to be consistent)
                 demo_uuid = "00000000-0000-0000-0000-000000000000" 
-                resp = supabase.table("users").select("*").eq("id", demo_uuid).execute()
+                demo_user = db.query(User).filter(User.id == demo_uuid).first()
                 
-                if not resp.data:
+                if not demo_user:
                     # Create demo user if not exists
-                    demo_user = {
-                        "id": demo_uuid,
-                        "email": request.email,
-                        "password": get_password_hash(request.password),
-                        "username": "Demo User",
-                        "is_active": True,
-                        "created_at": datetime.now().isoformat(),
-                        "quota": 999999,
-                        "vip_level": 0
-                    }
-                    supabase.table("users").insert(demo_user).execute()
+                    demo_user = User(
+                        id=demo_uuid,
+                        email=request.email,
+                        password=get_password_hash(request.password),
+                        username="Demo User",
+                        is_active=True,
+                        created_at=datetime.now(),
+                        quota=999999,
+                        vip_level=0
+                    )
+                    db.add(demo_user)
+                    db.commit()
+                    db.refresh(demo_user)
                     logger.info("Demo user created in DB")
-                else:
-                    # Ensure it's active and has correct email
-                    # Also fetch latest VIP status
-                    pass
                 
                 # Fetch latest data to return correct VIP status
-                resp = supabase.table("users").select("*").eq("id", demo_uuid).execute()
-                user_data = resp.data[0]
+                # demo_user is already refreshed or fetched
                 
                 return SuccessResponse(data=UserResponse(
-                    id=user_data["id"],
-                    username=user_data["username"],
-                    email=user_data["email"],
-                    isActive=user_data.get("is_active", True),
+                    id=str(demo_user.id),
+                    username=demo_user.username,
+                    email=demo_user.email,
+                    isActive=demo_user.is_active,
                     isDemo=True,
                     unlimitedQuota=True,
-                    vipLevel=user_data.get("vip_level", 0),
-                    vipExpireAt=user_data.get("vip_expire_at")
+                    vipLevel=demo_user.vip_level,
+                    vipExpireAt=demo_user.vip_expire_at.isoformat() if demo_user.vip_expire_at else None
                 ))
             except Exception as e:
                 logger.error(f"Failed to sync demo user to DB: {e}")
@@ -81,71 +80,68 @@ async def login(request: LoginRequest):
     
     # Check DB
     try:
-        response = supabase.table("users").select("*").eq("email", request.email).execute()
-        if not response.data:
+        user = db.query(User).filter(User.email == request.email).first()
+        if not user:
              logger.warning(f"Login failed: User not found for {request.email}")
              raise HTTPException(status_code=401, detail="邮箱或密码错误")
         
-        user_data = response.data[0]
-        if not verify_password(request.password, user_data["password"]):
+        if not verify_password(request.password, user.password):
             logger.warning(f"Login failed: Invalid password for {request.email}")
             raise HTTPException(status_code=401, detail="邮箱或密码错误")
             
-        logger.info(f"User {user_data['id']} logged in successfully")
+        logger.info(f"User {user.id} logged in successfully")
         return SuccessResponse(data=UserResponse(
-            id=user_data["id"],
-            username=user_data["username"],
-            email=user_data["email"],
-            isActive=user_data.get("is_active", True),
+            id=str(user.id),
+            username=user.username,
+            email=user.email,
+            isActive=user.is_active,
             isDemo=False,
-            unlimitedQuota=False,
-            vipLevel=user_data.get("vip_level", 0),
-            vipExpireAt=user_data.get("vip_expire_at")
+            unlimitedQuota=False, # Should we calculate this? Login doesn't return quota usually.
+            vipLevel=user.vip_level,
+            vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
         ))
-    except HTTPException:
-        raise
+    except HTTPException as he:
+        raise he
     except Exception as e:
         logger.error(f"Login error: {e}")
-        return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+        raise HTTPException(status_code=500, detail="登录失败")
 
 @router.post("/register", response_model=SuccessResponse)
-async def register(request: RegisterRequest):
+def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     用户注册接口
     """
     logger.info(f"Register attempt for email: {request.email}")
     try:
         # Check if user exists
-        response = supabase.table("users").select("id").eq("email", request.email).execute()
-        if response.data:
+        user = db.query(User).filter(User.email == request.email).first()
+        if user:
             logger.warning(f"Register failed: Email {request.email} already exists")
             return ErrorResponse(success=False, error={"code": "USER_EXISTS", "message": "该邮箱已被注册"})
             
         hashed_pw = get_password_hash(request.password)
         username = request.email.split("@")[0]
         
-        new_user = {
-            "email": request.email,
-            "password": hashed_pw,
-            "username": username,
-            "is_active": True,
-            "created_at": datetime.now().isoformat(),
-            "quota": 3 # Initialize with default quota
-        }
+        new_user = User(
+            email=request.email,
+            password=hashed_pw,
+            username=username,
+            is_active=True,
+            created_at=datetime.now(),
+            quota=3
+        )
         
-        insert_response = supabase.table("users").insert(new_user).execute()
-        if not insert_response.data:
-             logger.error("Failed to insert user into DB")
-             raise Exception("创建用户失败")
-             
-        created_user = insert_response.data[0]
-        logger.info(f"User {created_user['id']} registered successfully")
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        
+        logger.info(f"User {new_user.id} registered successfully")
         
         return SuccessResponse(data=UserResponse(
-            id=created_user["id"],
-            username=created_user["username"],
-            email=created_user["email"],
-            isActive=created_user["is_active"]
+            id=str(new_user.id),
+            username=new_user.username,
+            email=new_user.email,
+            isActive=new_user.is_active
         ))
         
     except Exception as e:
@@ -153,13 +149,13 @@ async def register(request: RegisterRequest):
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
 
 @router.get("/quota", response_model=SuccessResponse)
-async def get_quota(userId: str, current_user: UserResponse = Depends(get_current_user)):
+def get_quota(userId: str, current_user: UserResponse = Depends(get_current_user), db: Session = Depends(get_db)):
     # Ensure checking own quota
     if userId != current_user.id:
         pass 
         
     try:
-        quota_info = await QuotaService.get_user_quota(current_user.id, current_user.isDemo)
+        quota_info = QuotaService.get_user_quota(current_user.id, db, current_user.isDemo)
         return SuccessResponse(data=quota_info)
     except Exception as e:
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})

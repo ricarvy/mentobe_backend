@@ -4,13 +4,16 @@ from app.models import (
     CreateCheckoutSessionRequest, CheckoutSessionResponse
 )
 from app.config import settings
-from app.database import supabase
+from app.database import SessionLocal
+from sqlalchemy.orm import Session
+from app.db_models import User, Payment
 import httpx
 import logging
 import json
 import os
 import stripe
 from datetime import datetime, timedelta, timezone
+from fastapi.concurrency import run_in_threadpool
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -150,9 +153,9 @@ def get_vip_info(price_id: str):
         return 2, 365
     return 0, 0
 
-async def handle_checkout_completed(session: dict):
+def _handle_checkout_completed_sync(session: dict):
     """
-    Handle successful checkout session
+    Sync handler for checkout completion
     """
     user_id = session.get("client_reference_id")
     # Try to get price_id from metadata
@@ -164,55 +167,56 @@ async def handle_checkout_completed(session: dict):
 
     vip_level, duration_days = get_vip_info(price_id)
     
-    # 1. Insert into payments table
-    payment_data = {
-        "user_id": user_id,
-        "stripe_session_id": session.get("id"),
-        "amount_total": session.get("amount_total"),
-        "currency": session.get("currency"),
-        "status": session.get("payment_status"),
-        "price_id": price_id,
-        "vip_level": vip_level,
-        "vip_duration": "monthly" if duration_days == 30 else "yearly" if duration_days == 365 else "unknown"
-    }
-    
+    db = SessionLocal()
     try:
-        supabase.table("payments").insert(payment_data).execute()
-        print(f"✅ [Payment Updated] User: {user_id}, Amount: {payment_data['amount_total']}, Status: {payment_data['status']}")
+        # 1. Insert into payments table
+        payment = Payment(
+            user_id=user_id,
+            stripe_session_id=session.get("id"),
+            amount_total=session.get("amount_total"),
+            currency=session.get("currency"),
+            status=session.get("payment_status"),
+            price_id=price_id,
+            vip_level=vip_level,
+            vip_duration="monthly" if duration_days == 30 else "yearly" if duration_days == 365 else "unknown"
+        )
+        db.add(payment)
+        
+        print(f"✅ [Payment Updated] User: {user_id}, Amount: {session.get('amount_total')}, Status: {session.get('payment_status')}")
         logger.info(f"Payment recorded for user {user_id}")
+        
+        # 2. Update user VIP status
+        now = datetime.now(timezone.utc)
+        new_expire_at = now + timedelta(days=duration_days)
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            current_vip_level = user.vip_level or 0
+            current_expire_at = user.vip_expire_at
+
+            if current_expire_at:
+                if current_expire_at.tzinfo is None:
+                    current_expire_at = current_expire_at.replace(tzinfo=timezone.utc)
+                
+                # If same level and not expired, extend
+                if current_vip_level == vip_level and current_expire_at > now:
+                    new_expire_at = current_expire_at + timedelta(days=duration_days)
+            
+            user.vip_level = vip_level
+            user.vip_expire_at = new_expire_at
+            user.quota = 999999
+            
+            db.add(user)
+            print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
+            logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
+        
+        db.commit()
+
     except Exception as e:
-        logger.error(f"Failed to record payment: {e}")
+        logger.error(f"Failed to handle checkout completion: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
-    # 2. Update user VIP status
-    now = datetime.now(timezone.utc)
-    new_expire_at = now + timedelta(days=duration_days)
-
-    try:
-        current_user_resp = supabase.table("users").select("vip_expire_at, vip_level").eq("id", user_id).execute()
-        if current_user_resp.data:
-            current_user = current_user_resp.data[0]
-            current_expire_at_str = current_user.get("vip_expire_at")
-            current_vip_level = current_user.get("vip_level", 0)
-
-            if current_expire_at_str:
-                # Handle potential Z suffix or offset
-                current_expire_at_str = current_expire_at_str.replace('Z', '+00:00')
-                try:
-                    current_expire_at = datetime.fromisoformat(current_expire_at_str)
-                    # If same level and not expired, extend
-                    if current_vip_level == vip_level and current_expire_at > now:
-                        new_expire_at = current_expire_at + timedelta(days=duration_days)
-                except ValueError:
-                    pass # Invalid date format, stick to now + duration
-
-        update_data = {
-            "vip_level": vip_level,
-            "vip_expire_at": new_expire_at.isoformat(),
-            "quota": 999999
-        }
-
-        supabase.table("users").update(update_data).eq("id", user_id).execute()
-        print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
-        logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
-    except Exception as e:
-        logger.error(f"Failed to update user VIP status: {e}")
+async def handle_checkout_completed(session: dict):
+    await run_in_threadpool(_handle_checkout_completed_sync, session)

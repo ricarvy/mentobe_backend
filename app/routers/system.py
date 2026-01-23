@@ -1,71 +1,41 @@
-from fastapi import APIRouter
-from app.database import supabase
+from fastapi import APIRouter, HTTPException, Depends
 from app.models import SuccessResponse, ErrorResponse
+# from app.database import supabase # Removed
+from app.database import get_db
+from sqlalchemy.orm import Session
+from app.db_models import User
 from app.dependencies import get_password_hash
+from app.config import settings
 from datetime import datetime
-import logging
+import uuid
 
-# Configure logging
-logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/system", tags=["system"])
 
-router = APIRouter(tags=["system"])
-
-@router.post("/init", response_model=SuccessResponse)
-async def init_system():
+@router.post("/create-admin", response_model=SuccessResponse)
+def create_admin(db: Session = Depends(get_db)):
     """
-    系统初始化接口
-    用于创建初始管理员账号
+    Create initial admin user if not exists
     """
-    logger.info("System initialization requested")
+    email = "admin@mentobe.com" # Or from settings
+    password = "adminpassword" # Should be strong and from env
     
-    # Check if admin user exists
     try:
-        response = supabase.table("users").select("*").eq("email", "admin@mentobai.com").execute()
-        
-        if response.data:
-            logger.info("Admin user already exists")
-            admin_user = response.data[0]
-            return SuccessResponse(data={
-                "message": "管理员用户已存在",
-                "user": {
-                    "id": admin_user["id"],
-                    "username": admin_user["username"],
-                    "email": admin_user["email"]
-                }
-            })
-        
-        # Create admin user
-        logger.info("Creating admin user...")
-        hashed_pw = get_password_hash("Admin123!")
-        new_user = {
-            "email": "admin@mentobai.com",
-            "password": hashed_pw,
-            "username": "admin",
-            "is_active": True,
-            "created_at": datetime.now().isoformat()
-        }
-        
-        insert_response = supabase.table("users").insert(new_user).execute()
-        
-        if insert_response.data:
-            created_user = insert_response.data[0]
-            logger.info(f"Admin user created successfully: {created_user['id']}")
-            return SuccessResponse(data={
-                "message": "管理员用户创建成功",
-                "user": {
-                    "id": created_user["id"],
-                    "username": created_user["username"],
-                    "email": created_user["email"]
-                },
-                "credentials": {
-                    "email": "admin@mentobai.com",
-                    "password": "Admin123!"
-                }
-            })
-        else:
-             logger.error("Failed to insert admin user")
-             return ErrorResponse(success=False, error={"code": "DB_ERROR", "message": "创建管理员用户失败"})
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            return SuccessResponse(data={"message": "Admin already exists"})
             
+        new_user = User(
+            email=email,
+            password=get_password_hash(password),
+            username="Admin",
+            is_active=True,
+            created_at=datetime.now(),
+            quota=999999,
+            vip_level=99
+        )
+        db.add(new_user)
+        db.commit()
+        
+        return SuccessResponse(data={"message": "Admin created"})
     except Exception as e:
-        logger.error(f"System initialization error: {e}")
-        return ErrorResponse(success=False, error={"code": "DB_ERROR", "message": str(e)})
+        return ErrorResponse(success=False, error={"code": "CREATE_ERROR", "message": str(e)})

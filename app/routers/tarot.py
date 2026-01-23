@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from fastapi.concurrency import run_in_threadpool
 from app.models import (
     InterpretRequest, SuggestRequest, SuggestResponse, 
     HistoryResponse, SuccessResponse, ErrorResponse,
     InterpretationRecord, UserResponse
 )
 from app.dependencies import get_current_user
-from app.database import supabase
+# from app.database import supabase # Removed
+from app.database import SessionLocal, get_db
+from sqlalchemy.orm import Session
+from app.db_models import TarotInterpretation
 from app.config import settings
 from app.services.llm import stream_tarot_interpretation
 from app.services.quota import QuotaService
@@ -21,30 +25,34 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tarot", tags=["tarot"])
 
-async def save_interpretation(user_id: str, request: InterpretRequest, full_text: str):
+def _save_interpretation_sync(user_id: str, request: InterpretRequest, full_text: str):
     """
-    保存解读结果到数据库，并更新用户今日配额
+    Sync function to save interpretation and reduce quota
     """
-    # Save to DB
+    db = SessionLocal()
     try:
         logger.info(f"Saving interpretation for user {user_id}")
         cards_json = json.dumps([c.dict() for c in request.cards])
         
-        record = {
-            "user_id": user_id,
-            "question": request.question,
-            "spread_type": request.spread.id,
-            "cards": cards_json,
-            "interpretation": full_text,
-            "created_at": datetime.now().isoformat()
-        }
+        record = TarotInterpretation(
+            user_id=user_id,
+            question=request.question,
+            spread_type=request.spread.id,
+            cards=cards_json, # JSONB handles string? Or dict? SQLAlchemy JSONB expects dict/list usually.
+            # If using psycopg2, passing list/dict is fine. json.dumps returns string.
+            # If column is JSONB, pass the object directly.
+            interpretation=full_text,
+            created_at=datetime.now()
+        )
+        # JSONB column expects python object, not string.
+        record.cards = [c.dict() for c in request.cards]
         
-        supabase.table("tarot_interpretations").insert(record).execute()
+        db.add(record)
+        db.commit() # Commit to get ID? Not needed for quota.
         
         # Update quota
-        # Use QuotaService to reduce quota (updates users.quota and daily_quotas stats)
         try:
-            success = await QuotaService.reduce_quota(user_id)
+            success = QuotaService.reduce_quota(user_id, db)
             if not success:
                 logger.warning(f"Quota reduction returned False for user {user_id} after saving interpretation")
         except Exception as qe:
@@ -55,6 +63,11 @@ async def save_interpretation(user_id: str, request: InterpretRequest, full_text
     except Exception as e:
         logger.error(f"Failed to save interpretation: {e}")
         print(f"Failed to save interpretation: {e}")
+    finally:
+        db.close()
+
+async def save_interpretation(user_id: str, request: InterpretRequest, full_text: str):
+    await run_in_threadpool(_save_interpretation_sync, user_id, request, full_text)
 
 async def generate_interpretation_stream(user_id: str, request: InterpretRequest):
     """
@@ -112,7 +125,7 @@ async def generate_interpretation_stream(user_id: str, request: InterpretRequest
     await save_interpretation(user_id, request, full_text)
 
 @router.post("/interpret")
-async def interpret(request: InterpretRequest, current_user: UserResponse = Depends(get_current_user)):
+async def interpret(request: InterpretRequest, current_user: UserResponse = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     塔罗牌解读接口
     1. 检查用户今日配额
@@ -122,7 +135,7 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
     
     # 1. Check Quota
     if not current_user.unlimitedQuota:
-        quota_info = await QuotaService.get_user_quota(current_user.id)
+        quota_info = QuotaService.get_user_quota(current_user.id, db)
         if quota_info.remaining <= 0:
              logger.warning(f"User {current_user.id} exceeded daily quota")
              return ErrorResponse(success=False, error={"code": "QUOTA_EXCEEDED", "message": "今日额度已用完"})
@@ -158,30 +171,24 @@ async def suggest(request: SuggestRequest):
     return SuccessResponse(data=SuggestResponse(suggestion=suggestion))
 
 @router.get("/history", response_model=SuccessResponse)
-async def history(userId: str, current_user: UserResponse = Depends(get_current_user)):
+def history(userId: str, current_user: UserResponse = Depends(get_current_user), db: Session = Depends(get_db)):
     if userId != current_user.id and not current_user.isDemo:
         raise HTTPException(status_code=403, detail="Forbidden")
         
     try:
-        response = supabase.table("tarot_interpretations")\
-            .select("*")\
-            .eq("user_id", userId)\
-            .order("created_at", desc=True)\
-            .limit(20)\
-            .execute()
+        items = db.query(TarotInterpretation).filter(TarotInterpretation.user_id == userId).order_by(TarotInterpretation.created_at.desc()).limit(20).all()
             
         records = []
-        if response.data:
-            for item in response.data:
-                records.append(InterpretationRecord(
-                    id=item["id"],
-                    userId=item["user_id"],
-                    question=item["question"],
-                    spreadType=item["spread_type"],
-                    cards=item["cards"],
-                    interpretation=item["interpretation"],
-                    createdAt=item["created_at"]
-                ))
+        for item in items:
+            records.append(InterpretationRecord(
+                id=item.id,
+                userId=str(item.user_id),
+                question=item.question,
+                spreadType=item.spread_type,
+                cards=item.cards,
+                interpretation=item.interpretation,
+                createdAt=item.created_at.isoformat() if item.created_at else None
+            ))
                 
         return SuccessResponse(data=HistoryResponse(interpretations=records))
     except Exception as e:
