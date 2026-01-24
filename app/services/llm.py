@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 
 client = AsyncOpenAI(
     api_key=settings.ARK_API_KEY,
-    base_url="https://ark.cn-beijing.volces.com/api/v3",
+    base_url=settings.ARK_BASE_URL,
 )
+
 
 async def stream_tarot_interpretation(messages: list):
     """
