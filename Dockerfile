@@ -7,8 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# 复制海外环境变量为本地配置 (因为 config.py 指定了 .env.local)
-COPY .env.oversea.prod .env.local
 
 # Expose the port
 EXPOSE 8901
