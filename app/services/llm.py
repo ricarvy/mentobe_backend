@@ -58,9 +58,9 @@ async def stream_tarot_interpretation(messages: list):
         payload = {
             "model": settings.LLM_MODEL,
             "input": volc_input,
-            "parameters": {
-                "temperature": settings.LLM_TEMPERATURE
-            },
+            # "parameters": {
+            #    "temperature": settings.LLM_TEMPERATURE
+            # },
             "stream": True # Try enabling stream
         }
 
@@ -92,6 +92,10 @@ async def stream_tarot_interpretation(messages: list):
                                             if content_part.get("type") == "output_text":
                                                 yield content_part.get("text", "")
                             
+                            # Handle Volcengine native stream delta (response.output_text.delta)
+                            elif data.get("type") == "response.output_text.delta":
+                                yield data.get("delta", "")
+
                             # Fallback/OpenAI style check
                             elif "choices" in data and len(data["choices"]) > 0:
                                 delta = data["choices"][0].get("delta", {})

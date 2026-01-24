@@ -51,7 +51,8 @@ def test_connection():
                     }
                 ]
             }
-        ]
+        ],
+        "stream": True
     }
 
     print(f"Testing URL: {url}")
