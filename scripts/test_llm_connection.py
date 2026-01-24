@@ -1,53 +1,53 @@
-import asyncio
-import os
+import requests
+import json
 import sys
-from openai import AsyncOpenAI
-from dotenv import load_dotenv
 
-async def test_llm():
-    # Allow loading specific env file if provided as argument
-    if len(sys.argv) > 1:
-        env_file = sys.argv[1]
-        print(f"Loading environment from {env_file}...")
-        load_dotenv(env_file, override=True)
+def test_connection():
+    # Remove backticks if they were part of the copy-paste
+    url = "https://ark.cn-beijing.volces.com/api/v3/responses"
     
-    # Get config from environment (or loaded .env file)
-    api_key = os.getenv("ARK_API_KEY")
-    base_url = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/response")
-    model = os.getenv("LLM_MODEL", "doubao-seed-1-6-flash-250828")
-
-    print(f"Testing Volcengine Ark Connection...")
-    print(f"URL: {base_url}")
-    print(f"Model: {model}")
-    print(f"Key: {api_key[:5]}...{api_key[-5:] if api_key else 'None'}")
+    headers = {
+        "Authorization": "Bearer 24bcf30d-06df-40f3-915f-fa045b16acd7",
+        "Content-Type": "application/json"
+    }
     
-    if not api_key:
-        print("❌ Error: ARK_API_KEY not found in environment")
-        return
+    # Cleaned up data structure from the curl command
+    # Note: 'type': 'input_image' and 'input_text' seem specific to this endpoint/API version
+    data = {
+        "model": "doubao-seed-1-6-flash-250828",
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "image_url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/ark_demo_img_1.png"
+                    },
+                    {
+                        "type": "input_text",
+                        "text": "你看见了什么？"
+                    }
+                ]
+            }
+        ]
+    }
 
-    client = AsyncOpenAI(
-        api_key=api_key,
-        base_url=base_url,
-    )
+    print(f"Testing URL: {url}")
+    print("Sending request...")
     
     try:
-        print("Sending request...")
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "user", "content": "Hello! Are you working?"}
-            ],
-        )
-        print("✅ Success!")
+        response = requests.post(url, headers=headers, json=data)
+        print(f"Status Code: {response.status_code}")
         print("-" * 20)
-        print(response.choices[0].message.content)
+        print("Response Body:")
+        # Try to print pretty JSON if possible
+        try:
+            print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+        except:
+            print(response.text)
         print("-" * 20)
     except Exception as e:
-        print(f"❌ Failed: {e}")
-        # Print more details if available
-        if hasattr(e, 'response'):
-             print(f"Status Code: {e.status_code}")
-             print(f"Response Body: {e.response}")
+        print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(test_llm())
+    test_connection()
