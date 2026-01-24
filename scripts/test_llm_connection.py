@@ -13,7 +13,7 @@ async def test_llm():
     
     # Get config from environment (or loaded .env file)
     api_key = os.getenv("ARK_API_KEY")
-    base_url = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+    base_url = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3/response")
     model = os.getenv("LLM_MODEL", "doubao-seed-1-6-flash-250828")
 
     print(f"Testing Volcengine Ark Connection...")
