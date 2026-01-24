@@ -1,31 +1,53 @@
 import requests
 import json
 import sys
+import os
+from dotenv import load_dotenv
 
 def test_connection():
-    # Remove backticks if they were part of the copy-paste
-    url = "https://ark.cn-beijing.volces.com/api/v3/responses"
-    
+    if len(sys.argv) > 1:
+        env_file = sys.argv[1]
+        print(f"Loading env from {env_file}")
+        load_dotenv(env_file, override=True)
+    else:
+        print("No env file provided, using existing env vars or defaults")
+
+    api_key = os.getenv("ARK_API_KEY")
+    base_url = os.getenv("ARK_BASE_URL")
+    model = os.getenv("LLM_MODEL", "doubao-seed-1-6-flash-250828")
+
+    if not api_key:
+        print("Error: ARK_API_KEY not found")
+        return
+    if not base_url:
+        print("Error: ARK_BASE_URL not found")
+        return
+
+    print(f"Raw ARK_BASE_URL: {base_url}")
+
+    # Logic from app/services/llm.py
+    raw_url = base_url.strip().strip('"').strip("'")
+    if not raw_url.startswith("http"):
+            raw_url = f"https://{raw_url}"
+            
+    url = raw_url.rstrip('/')
+    if not url.endswith('/responses'):
+            url = f"{url}/responses"
+
     headers = {
-        "Authorization": "Bearer 24bcf30d-06df-40f3-915f-fa045b16acd7",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
-    # Cleaned up data structure from the curl command
-    # Note: 'type': 'input_image' and 'input_text' seem specific to this endpoint/API version
     data = {
-        "model": "doubao-seed-1-6-flash-250828",
+        "model": model,
         "input": [
             {
                 "role": "user",
                 "content": [
                     {
-                        "type": "input_image",
-                        "image_url": "https://ark-project.tos-cn-beijing.volces.com/doc_image/ark_demo_img_1.png"
-                    },
-                    {
                         "type": "input_text",
-                        "text": "你看见了什么？"
+                        "text": "Hello, are you working?"
                     }
                 ]
             }
@@ -33,6 +55,7 @@ def test_connection():
     }
 
     print(f"Testing URL: {url}")
+    print(f"Model: {model}")
     print("Sending request...")
     
     try:
@@ -40,7 +63,6 @@ def test_connection():
         print(f"Status Code: {response.status_code}")
         print("-" * 20)
         print("Response Body:")
-        # Try to print pretty JSON if possible
         try:
             print(json.dumps(response.json(), indent=2, ensure_ascii=False))
         except:

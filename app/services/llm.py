@@ -41,7 +41,12 @@ async def stream_tarot_interpretation(messages: list):
 
         # Ensure base URL ends with /responses (handle if user provided root or /responses)
         # settings.ARK_BASE_URL is typically "https://ark.cn-beijing.volces.com/api/v3"
-        url = settings.ARK_BASE_URL.rstrip('/')
+        # Also handle potential quotes in env var or missing protocol
+        raw_url = settings.ARK_BASE_URL.strip().strip('"').strip("'")
+        if not raw_url.startswith("http"):
+             raw_url = f"https://{raw_url}"
+             
+        url = raw_url.rstrip('/')
         if not url.endswith('/responses'):
              url = f"{url}/responses"
 
