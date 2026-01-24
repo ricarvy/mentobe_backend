@@ -48,7 +48,7 @@ echo "Starting new container on port $PORT..."
 docker run -d \
   --name $CONTAINER_NAME \
   -p 0.0.0.0:$PORT:8901 \
-  --env-file .env \
+  --env-file .env.prod \
   -v $(pwd)/logs:/app/logs \
   --restart unless-stopped \
   $APP_NAME
