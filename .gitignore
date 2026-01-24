@@ -11,3 +11,5 @@ venv/
 *.log
 deploy.tar.gz
 ps_output.txt
+mysql_data/
+mysql.sock.lock

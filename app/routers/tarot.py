@@ -29,40 +29,76 @@ def _save_interpretation_sync(user_id: str, request: InterpretRequest, full_text
     """
     Sync function to save interpretation and reduce quota
     """
+    # Create a new session for this background task
     db = SessionLocal()
     try:
+        # Handle demo user fallback ID
+        if user_id == "demo-user-id":
+            logger.info(f"Mapping 'demo-user-id' to actual demo UUID for storage")
+            user_id = "00000000-0000-0000-0000-000000000000"
+
         logger.info(f"Saving interpretation for user {user_id}")
-        cards_json = json.dumps([c.dict() for c in request.cards])
+        
+        # Serialize cards to list of dicts for JSON column
+        cards_data = []
+        for c in request.cards:
+            if hasattr(c, 'model_dump'):
+                cards_data.append(c.model_dump())
+            else:
+                cards_data.append(c.dict())
         
         record = TarotInterpretation(
             user_id=user_id,
             question=request.question,
             spread_type=request.spread.id,
-            cards=cards_json, # JSONB handles string? Or dict? SQLAlchemy JSONB expects dict/list usually.
-            # If using psycopg2, passing list/dict is fine. json.dumps returns string.
-            # If column is JSONB, pass the object directly.
+            cards=cards_data, 
             interpretation=full_text,
             created_at=datetime.now()
         )
-        # JSONB column expects python object, not string.
-        record.cards = [c.dict() for c in request.cards]
         
         db.add(record)
-        db.commit() # Commit to get ID? Not needed for quota.
+        db.flush()
+        db.commit()
         
-        # Update quota
+        # Update quota within the same transaction if possible, or separately
+        # To ensure consistency, we should try to do it here.
+        
         try:
-            success = QuotaService.reduce_quota(user_id, db)
-            if not success:
+            # We pass the db session to reduce_quota. 
+            # Note: reduce_quota commits inside. If we want atomic, we should change reduce_quota 
+            # or handle commit here. For now, let's trust reduce_quota logic but we need to commit record first 
+            # or add it to session and let reduce_quota commit it?
+            # reduce_quota calls db.commit(). So if we add record to db, it will be committed there too.
+            
+            quota_success = QuotaService.reduce_quota(user_id, db)
+            if not quota_success:
                 logger.warning(f"Quota reduction returned False for user {user_id} after saving interpretation")
+            else:
+                logger.info(f"Interpretation saved and quota updated for user {user_id}")
+                
         except Exception as qe:
             logger.error(f"Failed to reduce quota for user {user_id}: {qe}")
-            
-        logger.info(f"Interpretation saved and quota updated for user {user_id}")
+            # If quota fails, we still try to commit the interpretation?
+            # reduce_quota does rollback on error.
+            # If reduce_quota failed/rolled back, 'record' might be detached or not committed.
+            # Let's try to commit explicitly if reduce_quota didn't commit successfully?
+            # Actually reduce_quota commits on success.
+            pass
+
+        # If reduce_quota wasn't called (e.g. VIP logic inside it returns True without commit if no change needed?)
+        # Let's check implementation of reduce_quota.
+        # reduce_quota commits if it changes something. If VIP, it returns True but might not commit?
+        # Let's ensure we commit the interpretation record regardless.
+        
+        try:
+             db.commit()
+        except Exception:
+             # It might have been already committed
+             db.rollback()
             
     except Exception as e:
         logger.error(f"Failed to save interpretation: {e}")
-        print(f"Failed to save interpretation: {e}")
+        db.rollback()
     finally:
         db.close()
 
@@ -116,13 +152,18 @@ async def generate_interpretation_stream(user_id: str, request: InterpretRequest
     logger.info(f"Calling LLM for user {user_id}")
 
     full_text = ""
-    async for chunk in stream_tarot_interpretation(messages):
-        full_text += chunk
-        yield chunk
-        
-    # Save after streaming
-    logger.info(f"Interpretation result for user {user_id} completed. Length: {len(full_text)}")
-    await save_interpretation(user_id, request, full_text)
+    try:
+        async for chunk in stream_tarot_interpretation(messages):
+            full_text += chunk
+            yield chunk
+    except Exception as e:
+        logger.error(f"Stream generation error for user {user_id}: {e}")
+        # yield f"\n[Error: {str(e)}]" # Optional: inform user
+    finally:
+        # Save after streaming (successful or interrupted)
+        if full_text:
+            logger.info(f"Stream finished/interrupted. Saving interpretation for user {user_id} (len={len(full_text)})...")
+            await save_interpretation(user_id, request, full_text)
 
 @router.post("/interpret")
 async def interpret(request: InterpretRequest, current_user: UserResponse = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -180,16 +221,20 @@ def history(userId: str, current_user: UserResponse = Depends(get_current_user),
             
         records = []
         for item in items:
+            # cards is stored as JSON (list/dict) in DB, but InterpretationRecord expects JSON string
+            cards_str = json.dumps(item.cards) if item.cards else "[]"
+            
             records.append(InterpretationRecord(
-                id=item.id,
+                id=str(item.id),
                 userId=str(item.user_id),
                 question=item.question,
                 spreadType=item.spread_type,
-                cards=item.cards,
+                cards=cards_str,
                 interpretation=item.interpretation,
                 createdAt=item.created_at.isoformat() if item.created_at else None
             ))
                 
         return SuccessResponse(data=HistoryResponse(interpretations=records))
     except Exception as e:
+        logger.error(f"Error in history endpoint: {str(e)}", exc_info=True)
         return ErrorResponse(success=False, error={"code": "DATABASE_ERROR", "message": str(e)})

@@ -96,7 +96,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             email=user.email,
             isActive=user.is_active,
             isDemo=False,
-            unlimitedQuota=False, # Should we calculate this? Login doesn't return quota usually.
+            unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
             vipLevel=user.vip_level,
             vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
         ))

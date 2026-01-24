@@ -132,6 +132,8 @@ class QuotaService:
             
             if is_valid_vip:
                 logger.info(f"User {user_id} is VIP. Skipping quota reduction.")
+                # Even if VIP, we need to commit the transaction because we might have added an interpretation record in the session
+                db.commit()
                 return True
 
             current_quota = user.quota or 0

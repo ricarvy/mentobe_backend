@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentob AI Admin Dashboard</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 0; background: #f4f4f9; }
+        header { background: #333; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        h1 { margin: 0; font-size: 20px; }
+        .container { padding: 20px; max-width: 1200px; margin: 0 auto; }
+        
+        /* Login */
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .login-box { background: white; padding: 30px; border-radius: 8px; width: 300px; }
+        .login-box input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        .login-box button { width: 100%; padding: 10px; background: #333; color: white; border: none; cursor: pointer; }
+        
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; cursor: pointer; background: #eee; margin-right: 5px; border-radius: 5px 5px 0 0; }
+        .tab.active { background: #333; color: white; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #eee; }
+        tr:hover { background: #f9f9f9; }
+        
+        .action-btn { padding: 5px 10px; margin-right: 5px; cursor: pointer; border: none; border-radius: 3px; font-size: 12px; }
+        .btn-red { background: #e74c3c; color: white; }
+        .btn-blue { background: #3498db; color: white; }
+        
+        .hidden { display: none !important; }
+        
+        /* Modal */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 500; }
+        .modal-content { background: white; padding: 20px; border-radius: 5px; width: 400px; }
+    </style>
+</head>
+<body>
+
+<div id="login-overlay">
+    <div class="login-box">
+        <h2 style="text-align: center; margin-top: 0;">Admin Login</h2>
+        <input type="text" id="admin-user" placeholder="Username (admin)" value="admin">
+        <input type="password" id="admin-pass" placeholder="Password" value="admin">
+        <button onclick="doLogin()">Login</button>
+        <p id="login-msg" style="color: red; text-align: center; margin-bottom: 0;"></p>
+    </div>
+</div>
+
+<header>
+    <h1>Mentob AI Admin</h1>
+    <button onclick="logout()" style="background: transparent; border: 1px solid white; color: white; padding: 5px 15px; cursor: pointer;">Logout</button>
+</header>
+
+<div class="container hidden" id="main-content">
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('users')">Users</div>
+        <div class="tab" onclick="switchTab('payments')">Payments</div>
+        <div class="tab" onclick="switchTab('interpretations')">AI Interpretations</div>
+    </div>
+
+    <!-- Users View -->
+    <div id="view-users">
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between;">
+            <h2>User Management</h2>
+            <button class="action-btn btn-blue" onclick="loadUsers()">Refresh</button>
+        </div>
+        <table id="users-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Email</th>
+                    <th>Username</th>
+                    <th>Quota</th>
+                    <th>VIP Lvl</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- Payments View -->
+    <div id="view-payments" class="hidden">
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between;">
+            <h2>Payment History</h2>
+            <button class="action-btn btn-blue" onclick="loadPayments()">Refresh</button>
+        </div>
+        <table id="payments-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>User ID</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    
+    <!-- Interpretations View -->
+    <div id="view-interpretations" class="hidden">
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between;">
+            <h2>AI Interpretations</h2>
+            <button class="action-btn btn-blue" onclick="loadInterpretations()">Refresh</button>
+        </div>
+        <table id="interpretations-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>User ID</th>
+                    <th>Question</th>
+                    <th>Spread</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="edit-user-modal" class="modal hidden">
+    <div class="modal-content">
+        <h3>Edit User</h3>
+        <input type="hidden" id="edit-user-id">
+        <label>Quota: <input type="number" id="edit-quota"></label>
+        <label>VIP Level: <input type="number" id="edit-vip"></label>
+        <div style="text-align: right; margin-top: 10px;">
+            <button class="action-btn" onclick="closeModal()">Cancel</button>
+            <button class="action-btn btn-blue" onclick="saveUser()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let credentials = null;
+
+    async function doLogin() {
+        const u = document.getElementById('admin-user').value;
+        const p = document.getElementById('admin-pass').value;
+        
+        try {
+            // Use new admin login endpoint
+            const res = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: u, password: p })
+            });
+            
+            if (res.status === 401) {
+                document.getElementById('login-msg').innerText = "Invalid credentials";
+                return;
+            }
+
+            const data = await res.json();
+            
+            if (data.success) {
+                credentials = btoa(u + ':' + p);
+                document.getElementById('login-overlay').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                loadUsers();
+            } else {
+                document.getElementById('login-msg').innerText = data.error?.message || "Login failed";
+            }
+        } catch (e) {
+            document.getElementById('login-msg').innerText = "Network error";
+        }
+    }
+
+    function logout() {
+        location.reload();
+    }
+
+    function switchTab(tab) {
+        ['users', 'payments', 'interpretations'].forEach(t => {
+            document.getElementById('view-' + t).classList.add('hidden');
+        });
+        document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+        
+        document.getElementById('view-' + tab).classList.remove('hidden');
+        event.target.classList.add('active');
+        
+        if (tab === 'users') loadUsers();
+        if (tab === 'payments') loadPayments();
+        if (tab === 'interpretations') loadInterpretations();
+    }
+
+    async function apiCall(url, method = 'GET', body = null) {
+        const opts = {
+            method,
+            headers: { 
+                'Authorization': 'Basic ' + credentials,
+                'Content-Type': 'application/json'
+            }
+        };
+        if (body) opts.body = JSON.stringify(body);
+        
+        const res = await fetch(url, opts);
+        if (res.status === 401 || res.status === 403) {
+            alert("Session expired or unauthorized");
+            logout();
+            return null;
+        }
+        return res.json();
+    }
+
+    // --- Users ---
+    async function loadUsers() {
+        const res = await apiCall('/api/admin/users');
+        if (!res || !res.success) return;
+        
+        const tbody = document.querySelector('#users-table tbody');
+        tbody.innerHTML = '';
+        res.data.forEach(u => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${u.id.substring(0,8)}...</td>
+                    <td>${u.email}</td>
+                    <td>${u.username || '-'}</td>
+                    <td>${u.quota}</td>
+                    <td>${u.vip_level}</td>
+                    <td>${new Date(u.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <button class="action-btn btn-blue" onclick="editUser('${u.id}', ${u.quota}, ${u.vip_level})">Edit</button>
+                        <button class="action-btn btn-red" onclick="deleteUser('${u.id}')">Del</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    async function deleteUser(id) {
+        if (!confirm('Delete user?')) return;
+        const res = await apiCall('/api/admin/users/' + id, 'DELETE');
+        if (res && res.success) loadUsers();
+    }
+
+    function editUser(id, quota, vip) {
+        document.getElementById('edit-user-id').value = id;
+        document.getElementById('edit-quota').value = quota;
+        document.getElementById('edit-vip').value = vip;
+        document.getElementById('edit-user-modal').classList.remove('hidden');
+    }
+    
+    function closeModal() {
+        document.getElementById('edit-user-modal').classList.add('hidden');
+    }
+
+    async function saveUser() {
+        const id = document.getElementById('edit-user-id').value;
+        const quota = parseInt(document.getElementById('edit-quota').value);
+        const vip = parseInt(document.getElementById('edit-vip').value);
+        
+        const res = await apiCall('/api/admin/users/' + id, 'PUT', { quota, vip_level: vip });
+        if (res && res.success) {
+            closeModal();
+            loadUsers();
+        } else {
+            alert('Failed to update');
+        }
+    }
+
+    // --- Payments ---
+    async function loadPayments() {
+        const res = await apiCall('/api/admin/payments');
+        if (!res || !res.success) return;
+        
+        const tbody = document.querySelector('#payments-table tbody');
+        tbody.innerHTML = '';
+        res.data.forEach(p => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${p.id}</td>
+                    <td>${p.user_id ? p.user_id.substring(0,8) + '...' : 'N/A'}</td>
+                    <td>${(p.amount_total / 100).toFixed(2)}</td>
+                    <td>${p.status}</td>
+                    <td>${new Date(p.created_at).toLocaleString()}</td>
+                </tr>
+            `;
+        });
+    }
+
+    // --- Interpretations ---
+    async function loadInterpretations() {
+        const res = await apiCall('/api/admin/interpretations');
+        if (!res || !res.success) return;
+        
+        const tbody = document.querySelector('#interpretations-table tbody');
+        tbody.innerHTML = '';
+        res.data.forEach(i => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${i.id}</td>
+                    <td>${i.user_id ? i.user_id.substring(0,8) + '...' : 'N/A'}</td>
+                    <td>${i.question ? i.question.substring(0, 30) + '...' : '-'}</td>
+                    <td>${i.spread_type || '-'}</td>
+                    <td>${new Date(i.created_at).toLocaleString()}</td>
+                    <td>
+                        <button class="action-btn btn-red" onclick="deleteInterpretation(${i.id})">Del</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    async function deleteInterpretation(id) {
+        if (!confirm('Delete interpretation?')) return;
+        const res = await apiCall('/api/admin/interpretations/' + id, 'DELETE');
+        if (res && res.success) loadInterpretations();
+    }
+</script>
+
+</body>
+</html>

@@ -57,7 +57,7 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: 
             email=user.email,
             isActive=user.is_active,
             isDemo=False,
-            unlimitedQuota=False,
+            unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
             vipLevel=user.vip_level,
             vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
         )

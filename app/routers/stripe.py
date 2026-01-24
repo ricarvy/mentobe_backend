@@ -151,6 +151,8 @@ def get_vip_info(price_id: str):
         return 2, 30
     elif price_id == settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY:
         return 2, 365
+    
+    logger.warning(f"Unknown price_id: {price_id}")
     return 0, 0
 
 def _handle_checkout_completed_sync(session: dict):
@@ -166,6 +168,10 @@ def _handle_checkout_completed_sync(session: dict):
         return
 
     vip_level, duration_days = get_vip_info(price_id)
+    
+    if vip_level == 0:
+        logger.error(f"Invalid VIP level 0 for price_id: {price_id}. Skipping user update.")
+        # We still record the payment for audit, but mark as unknown/failed logic maybe?
     
     db = SessionLocal()
     try:
@@ -185,30 +191,33 @@ def _handle_checkout_completed_sync(session: dict):
         print(f"✅ [Payment Updated] User: {user_id}, Amount: {session.get('amount_total')}, Status: {session.get('payment_status')}")
         logger.info(f"Payment recorded for user {user_id}")
         
-        # 2. Update user VIP status
-        now = datetime.now(timezone.utc)
-        new_expire_at = now + timedelta(days=duration_days)
+        # 2. Update user VIP status ONLY if vip_level > 0
+        if vip_level > 0:
+            now = datetime.now(timezone.utc)
+            new_expire_at = now + timedelta(days=duration_days)
 
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            current_vip_level = user.vip_level or 0
-            current_expire_at = user.vip_expire_at
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                current_vip_level = user.vip_level or 0
+                current_expire_at = user.vip_expire_at
 
-            if current_expire_at:
-                if current_expire_at.tzinfo is None:
-                    current_expire_at = current_expire_at.replace(tzinfo=timezone.utc)
+                if current_expire_at:
+                    if current_expire_at.tzinfo is None:
+                        current_expire_at = current_expire_at.replace(tzinfo=timezone.utc)
+                    
+                    # If same level and not expired, extend
+                    if current_vip_level == vip_level and current_expire_at > now:
+                        new_expire_at = current_expire_at + timedelta(days=duration_days)
                 
-                # If same level and not expired, extend
-                if current_vip_level == vip_level and current_expire_at > now:
-                    new_expire_at = current_expire_at + timedelta(days=duration_days)
-            
-            user.vip_level = vip_level
-            user.vip_expire_at = new_expire_at
-            user.quota = 999999
-            
-            db.add(user)
-            print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
-            logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
+                user.vip_level = vip_level
+                user.vip_expire_at = new_expire_at
+                user.quota = 999999
+                
+                db.add(user)
+                print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
+                logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
+            else:
+                logger.error(f"User {user_id} not found in database")
         
         db.commit()
 

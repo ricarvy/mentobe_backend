@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.routers import auth, tarot, debug, system, stripe
+from app.routers import auth, tarot, debug, system, stripe, admin
 from app.config import settings
 import os
 import logging
@@ -16,7 +16,7 @@ def setup_logging():
         os.makedirs(log_dir)
     
     # Log filename with date
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_file = os.path.join(log_dir, f"{current_date}.log")
     
     # Configure logging
@@ -62,6 +62,7 @@ app.include_router(tarot.router, prefix="/api")
 app.include_router(debug.router, prefix="/api")
 app.include_router(system.router, prefix="/api") # /api/init
 app.include_router(stripe.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 # Static files (Web Interface)
 # Ensure static directory exists

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentob AI Register</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+        label { display: block; margin-top: 10px; }
+        input { width: 100%; padding: 8px; margin-top: 5px; }
+        button { background: #28a745; color: white; border: none; padding: 10px 20px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #218838; }
+        .error { color: red; margin-top: 10px; }
+        .success { color: green; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Register New User</h1>
+    <div class="section">
+        <label>Username: <input type="text" id="username" placeholder="Enter username"></label>
+        <label>Email: <input type="email" id="email" placeholder="Enter email"></label>
+        <label>Password: <input type="password" id="password" placeholder="Enter password"></label>
+        <button onclick="register()">Register</button>
+        <p id="status"></p>
+        <p><a href="/">Back to Login</a></p>
+    </div>
+
+    <script>
+        async function register() {
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const statusEl = document.getElementById('status');
+            
+            statusEl.innerText = 'Registering...';
+            statusEl.className = '';
+
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    statusEl.innerText = 'Registration successful! You can now login.';
+                    statusEl.className = 'success';
+                    setTimeout(() => window.location.href = '/', 2000);
+                } else {
+                    statusEl.innerText = 'Error: ' + (data.error ? data.error.message : 'Unknown error');
+                    statusEl.className = 'error';
+                }
+            } catch (e) {
+                statusEl.innerText = 'Network Error: ' + e.message;
+                statusEl.className = 'error';
+            }
+        }
+    </script>
+</body>
+</html>
