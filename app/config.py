@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str
     LLM_TEMPERATURE: float
     ARK_API_KEY: str
-    ARK_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3" # Default to Beijing
+    ARK_BASE_URL: str
     TAROT_SYSTEM_PROMPT: str
     
     # Demo Account
