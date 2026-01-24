@@ -1,37 +1,53 @@
 import asyncio
 import os
+import sys
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
-# Load from .env.prod manually if needed, but for this test we'll use hardcoded values from the file we just read
-# to verify EXACTLY what is being used.
-
-API_KEY = "24bcf30d-06df-40f3-915f-fa045b16acd7"
-BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
-MODEL = "doubao-seed-1-6-flash-250828"
-
 async def test_llm():
-    print(f"Testing Volcengine Ark Connection...")
-    print(f"URL: {BASE_URL}")
-    print(f"Model: {MODEL}")
-    print(f"Key: {API_KEY[:5]}...{API_KEY[-5:]}")
+    # Allow loading specific env file if provided as argument
+    if len(sys.argv) > 1:
+        env_file = sys.argv[1]
+        print(f"Loading environment from {env_file}...")
+        load_dotenv(env_file, override=True)
     
+    # Get config from environment (or loaded .env file)
+    api_key = os.getenv("ARK_API_KEY")
+    base_url = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+    model = os.getenv("LLM_MODEL", "doubao-seed-1-6-flash-250828")
+
+    print(f"Testing Volcengine Ark Connection...")
+    print(f"URL: {base_url}")
+    print(f"Model: {model}")
+    print(f"Key: {api_key[:5]}...{api_key[-5:] if api_key else 'None'}")
+    
+    if not api_key:
+        print("❌ Error: ARK_API_KEY not found in environment")
+        return
+
     client = AsyncOpenAI(
-        api_key=API_KEY,
-        base_url=BASE_URL,
+        api_key=api_key,
+        base_url=base_url,
     )
     
     try:
+        print("Sending request...")
         response = await client.chat.completions.create(
-            model=MODEL,
+            model=model,
             messages=[
-                {"role": "user", "content": "Hello, are you working?"}
+                {"role": "user", "content": "Hello! Are you working?"}
             ],
         )
         print("✅ Success!")
+        print("-" * 20)
         print(response.choices[0].message.content)
+        print("-" * 20)
     except Exception as e:
         print(f"❌ Failed: {e}")
+        # Print more details if available
+        if hasattr(e, 'response'):
+             print(f"Status Code: {e.status_code}")
+             print(f"Response Body: {e.response}")
 
 if __name__ == "__main__":
     asyncio.run(test_llm())
