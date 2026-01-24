@@ -43,7 +43,7 @@ fi
 echo "Starting new container on port $PORT..."
 # --name: 指定容器名称
 # -p: 端口映射 (宿主机端口:容器端口)
-# --env-file: 从 .env 文件加载环境变量
+# --env-file: 从 .env.prod 文件加载环境变量
 # --restart: 容器退出时的重启策略
 docker run -d \
   --name $CONTAINER_NAME \
