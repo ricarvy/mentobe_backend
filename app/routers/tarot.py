@@ -4,7 +4,8 @@ from fastapi.concurrency import run_in_threadpool
 from app.models import (
     InterpretRequest, SuggestRequest, SuggestResponse, 
     HistoryResponse, SuccessResponse, ErrorResponse,
-    InterpretationRecord, UserResponse
+    InterpretationRecord, UserResponse,
+    FollowupRequest, FollowupResponse
 )
 from app.dependencies import get_current_user
 # from app.database import supabase # Removed
@@ -18,6 +19,7 @@ import asyncio
 import json
 import uuid
 import logging
+import re
 from datetime import datetime
 
 # Configure logging
@@ -211,6 +213,90 @@ async def suggest(request: SuggestRequest):
     suggestion = suggestions_map.get(request.lang, suggestions_map["cn"])
     return SuccessResponse(data=SuggestResponse(suggestion=suggestion))
 
+@router.post("/followup", response_model=SuccessResponse)
+async def followup(request: FollowupRequest):
+    """
+    追问推荐接口：
+    输入：牌阵、选的牌、用户的问题、AI解读内容、追问数
+    输出：针对当前AI解读内容，用户下一个可能想问的具体问题列表
+    """
+    cards_info = []
+    for i, card in enumerate(request.cards):
+        pos_name = request.spread.positions[i].name if i < len(request.spread.positions) else f"位置 {i+1}"
+        status = "逆位" if getattr(card, "isReversed", False) else "正位"
+        meaning = card.reversedMeaning if getattr(card, "isReversed", False) else card.meaning
+        cards_info.append(f"{i+1}. {pos_name} - {card.name}（{status}）: {meaning}")
+    cards_desc = "\n".join(cards_info)
+
+    lang_instruction = {
+        "cn": "请生成用户可能的下一个具体问题，语气友好，避免重复当前解读。",
+        "en": "Generate likely next specific questions. Be friendly and avoid repeating the current interpretation.",
+        "jp": "次にユーザーが質問しそうな具体的な質問を生成してください。丁寧に、現在の解釈の繰り返しは避けてください。"
+    }.get(request.lang, "请生成用户可能的下一个具体问题，语气友好，避免重复当前解读。")
+
+    prompt = f"""
+    背景：
+    - 用户问题：{request.question}
+    - 牌阵：{request.spread.name} - {request.spread.description}
+    - 抽到的牌：
+    {cards_desc}
+
+    当前AI解读内容：
+    {request.interpretation}
+
+    任务：
+    {lang_instruction}
+    数量：{request.followupCount or settings.TAROT_FOLLOWUP_COUNT} 个
+    要求：每个问题都应具体、可执行，涵盖情感、行动、风险与时机等不同维度；避免泛泛而谈。
+    输出：仅输出问题列表，每行一个问题，不要多余说明。
+    """
+
+    messages = [
+        {"role": "system", "content": settings.TAROT_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt}
+    ]
+
+    text = ""
+    try:
+        async for chunk in stream_tarot_interpretation(messages):
+            text += chunk
+    except Exception as e:
+        logger.error(f"Followup LLM call failed: {e}")
+        text = ""
+
+    fallback_map = {
+        "cn": [
+            "如果选择A方案，短期内我需要做哪些具体准备？",
+            "这段关系中我应该如何设定边界来保护自己？",
+            "当前最大的风险点是什么，我可以如何预防？"
+        ],
+        "en": [
+            "If I choose plan A, what concrete steps should I take next?",
+            "How can I set healthy boundaries in this relationship to protect myself?",
+            "What is the biggest risk right now and how can I mitigate it?"
+        ],
+        "jp": [
+            "A案を選ぶ場合、直近で何を具体的に準備すべきですか？",
+            "この関係で自分を守るために、どのように境界線を設定すべきですか？",
+            "今最も大きなリスクは何で、どう対処できますか？"
+        ]
+    }
+
+    questions: list[str] = []
+
+    if text.strip():
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for line in lines:
+            cleaned = re.sub(r"^[0-9０-９\.\-\)\s\u2022]+", "", line)
+            if cleaned:
+                questions.append(cleaned)
+
+    if not questions:
+        questions = fallback_map.get(request.lang, fallback_map["cn"])
+
+    questions = questions[: max(1, request.followupCount)]
+
+    return SuccessResponse(data=FollowupResponse(questions=questions))
 @router.get("/history", response_model=SuccessResponse)
 def history(userId: str, current_user: UserResponse = Depends(get_current_user), db: Session = Depends(get_db)):
     if userId != current_user.id and not current_user.isDemo:

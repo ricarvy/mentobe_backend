@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ARK_API_KEY: str
     ARK_BASE_URL: str
     TAROT_SYSTEM_PROMPT: str
+    TAROT_FOLLOWUP_COUNT: int = 3
     
     # Demo Account
     DEMO_ACCOUNT_ENABLED: bool

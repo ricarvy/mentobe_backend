@@ -94,6 +94,17 @@ class SuggestRequest(BaseModel):
 class SuggestResponse(BaseModel):
     suggestion: str
 
+class FollowupRequest(BaseModel):
+    question: str
+    spread: Spread
+    cards: List[TarotCard]
+    interpretation: str
+    followupCount: Optional[int] = None
+    lang: str = "cn" # cn, en, jp
+
+class FollowupResponse(BaseModel):
+    questions: List[str]
+
 class HistoryResponse(BaseModel):
     interpretations: List[InterpretationRecord]
 
