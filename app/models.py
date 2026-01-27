@@ -37,7 +37,11 @@ class UserResponse(BaseModel):
     isDemo: Optional[bool] = False
     unlimitedQuota: Optional[bool] = False
     vipLevel: Optional[int] = 0
-    vipExpireAt: Optional[datetime] = None
+    vipExpireAt: Optional[Union[datetime, str]] = None
+    accessToken: Optional[str] = None
+
+class SocialLoginRequest(BaseModel):
+    token: str
 
 # Tarot Models
 class TarotCard(BaseModel):

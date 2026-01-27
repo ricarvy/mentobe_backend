@@ -10,7 +10,7 @@ PORT=8901
 # 0. Pull latest code
 # 从远程仓库拉取最新代码
 echo "Pulling latest code..."
-git pull
+git pull gitee master
 
 # 1. Build the Docker image
 # 使用当前目录下的 Dockerfile 构建镜像

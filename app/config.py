@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY: str
     NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY: str
     
+    # Auth Config
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    GOOGLE_CLIENT_ID: str
+    APPLE_CLIENT_ID: str
+    
     model_config = SettingsConfigDict(env_file=".env.local", extra="ignore")
 
 @lru_cache()

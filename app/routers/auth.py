@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.models import (
     LoginRequest, RegisterRequest, UserResponse, 
-    SuccessResponse, ErrorResponse, QuotaResponse
+    SuccessResponse, ErrorResponse, QuotaResponse,
+    SocialLoginRequest
 )
 from app.dependencies import get_current_user, verify_password, get_password_hash
 from app.database import get_db, SessionLocal
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.db_models import User
 from app.config import settings
 from app.services.quota import QuotaService
+from app.services.auth_social import SocialAuthService
+from app.utils.security import create_access_token
 from datetime import datetime
 import logging
 
@@ -159,3 +162,101 @@ def get_quota(userId: str, current_user: UserResponse = Depends(get_current_user
         return SuccessResponse(data=quota_info)
     except Exception as e:
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+
+@router.post("/google-login", response_model=SuccessResponse)
+def google_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
+    """
+    Google 登录接口
+    """
+    try:
+        id_info = SocialAuthService.verify_google_token(request.token)
+        email = id_info.get('email')
+        if not email:
+            raise HTTPException(status_code=400, detail="Email not found in token")
+        
+        # Check DB
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            # Register user
+            user = User(
+                email=email,
+                username=email.split("@")[0],
+                is_active=True,
+                created_at=datetime.now(),
+                quota=3, # Default quota
+                password=None # Social login user has no password
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user.email})
+        
+        return SuccessResponse(data=UserResponse(
+            id=str(user.id),
+            username=user.username,
+            email=user.email,
+            isActive=user.is_active,
+            isDemo=False,
+            unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
+            vipLevel=user.vip_level,
+            vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
+            accessToken=access_token
+        ))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Google login error: {e}")
+        raise HTTPException(status_code=500, detail="Login failed")
+
+@router.post("/apple-login", response_model=SuccessResponse)
+def apple_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
+    """
+    Apple 登录接口
+    """
+    try:
+        id_info = SocialAuthService.verify_apple_token(request.token)
+        email = id_info.get('email')
+        if not email:
+             raise HTTPException(status_code=400, detail="Email not found in token")
+        
+        # Check DB
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            # Register user
+            user = User(
+                email=email,
+                username=email.split("@")[0],
+                is_active=True,
+                created_at=datetime.now(),
+                quota=3, # Default quota
+                password=None
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user.email})
+        
+        return SuccessResponse(data=UserResponse(
+            id=str(user.id),
+            username=user.username,
+            email=user.email,
+            isActive=user.is_active,
+            isDemo=False,
+            unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
+            vipLevel=user.vip_level,
+            vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
+            accessToken=access_token
+        ))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Apple login error: {e}")
+        raise HTTPException(status_code=500, detail="Login failed")
