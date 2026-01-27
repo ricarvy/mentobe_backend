@@ -294,7 +294,10 @@ async def followup(request: FollowupRequest):
     if not questions:
         questions = fallback_map.get(request.lang, fallback_map["cn"])
 
-    questions = questions[: max(1, request.followupCount)]
+    limit = request.followupCount or settings.TAROT_FOLLOWUP_COUNT
+    questions = questions[:limit]
+
+    logger.info(f"Generated followup questions for user: {questions}")
 
     return SuccessResponse(data=FollowupResponse(questions=questions))
 @router.get("/history", response_model=SuccessResponse)
