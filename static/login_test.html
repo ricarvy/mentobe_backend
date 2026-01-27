@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Login Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f2f5;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 { margin-bottom: 2rem; color: #333; }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            text-decoration: none;
+            color: white;
+            transition: background 0.3s;
+            box-sizing: border-box;
+        }
+        .btn-google { background-color: #db4437; }
+        .btn-google:hover { background-color: #c1351d; }
+        .btn-apple { background-color: #000000; }
+        .btn-apple:hover { background-color: #333333; }
+        
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-radius: 5px;
+            word-break: break-all;
+            display: none;
+            text-align: left;
+        }
+        #error {
+            margin-top: 20px;
+            padding: 15px;
+            background: #ffebee;
+            color: #c62828;
+            border-radius: 5px;
+            display: none;
+        }
+        .label { font-weight: bold; display: block; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Login Test</h1>
+        
+        <div style="background-color: #fff3cd; color: #856404; padding: 10px; margin-bottom: 20px; border-radius: 5px; text-align: left; font-size: 14px;">
+            <strong>Configuration Tip:</strong><br>
+            Please ensure the following Redirect URIs are added to your OAuth Provider (Google/Apple) console:<br>
+            <code id="redirect-uri-google" style="background: #eee; padding: 2px 4px; border-radius: 3px;">Loading...</code>
+        </div>
+
+        <a href="/api/auth/login/google?next=/google_login_successed" class="btn btn-google">
+            Login with Google
+        </a>
+        
+        <a href="/api/auth/login/apple?next=/login_test.html" class="btn btn-apple">
+            Login with Apple
+        </a>
+
+        <div id="result">
+            <span class="label">Login Successful!</span>
+            <span class="label">Token:</span>
+            <div id="token-display" style="font-family: monospace; font-size: 12px;"></div>
+        </div>
+
+        <div id="error">
+            <span class="label">Login Failed</span>
+            <div id="error-msg"></div>
+        </div>
+        
+        <p><a href="/" style="color: #666; font-size: 14px; margin-top: 20px; display: inline-block;">Back to Home</a></p>
+    </div>
+
+    <script>
+        // Check for URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        const error = urlParams.get('error');
+        const message = urlParams.get('message');
+
+        // Display current Redirect URI hint
+        const origin = window.location.origin;
+        const googleRedirect = `${origin}/api/auth/callback/google`;
+        document.getElementById('redirect-uri-google').textContent = googleRedirect;
+
+        if (token) {
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('token-display').textContent = token;
+            
+            // Optionally clear URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (error) {
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error-msg').textContent = message || 'Unknown error';
+        }
+    </script>
+</body>
+</html>

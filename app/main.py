@@ -45,7 +45,12 @@ def setup_logging():
 
 setup_logging()
 
+from starlette.middleware.sessions import SessionMiddleware
+
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
+
+# Session Middleware
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 # CORS
 app.add_middleware(

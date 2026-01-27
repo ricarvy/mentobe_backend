@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse
 from app.models import (
     LoginRequest, RegisterRequest, UserResponse, 
     SuccessResponse, ErrorResponse, QuotaResponse,
@@ -93,6 +94,10 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=401, detail="邮箱或密码错误")
             
         logger.info(f"User {user.id} logged in successfully")
+        
+        # Create Access Token
+        access_token = create_access_token(data={"sub": user.email})
+        
         return SuccessResponse(data=UserResponse(
             id=str(user.id),
             username=user.username,
@@ -101,7 +106,8 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             isDemo=False,
             unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
             vipLevel=user.vip_level,
-            vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
+            vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
+            accessToken=access_token
         ))
     except HTTPException as he:
         raise he
@@ -163,86 +169,76 @@ def get_quota(userId: str, current_user: UserResponse = Depends(get_current_user
     except Exception as e:
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
 
-@router.post("/google-login", response_model=SuccessResponse)
-def google_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
-    """
-    Google 登录接口
-    """
-    try:
-        id_info = SocialAuthService.verify_google_token(request.token)
-        email = id_info.get('email')
-        if not email:
-            raise HTTPException(status_code=400, detail="Email not found in token")
-        
-        # Check DB
-        user = db.query(User).filter(User.email == email).first()
-        if not user:
-            # Register user
-            user = User(
-                email=email,
-                username=email.split("@")[0],
-                is_active=True,
-                created_at=datetime.now(),
-                quota=3, # Default quota
-                password=None # Social login user has no password
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        
-        # Create access token
-        access_token = create_access_token(data={"sub": user.email})
-        
-        return SuccessResponse(data=UserResponse(
-            id=str(user.id),
-            username=user.username,
-            email=user.email,
-            isActive=user.is_active,
-            isDemo=False,
-            unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
-            vipLevel=user.vip_level,
-            vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
-            accessToken=access_token
-        ))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        logger.error(f"Google login error: {e}")
-        raise HTTPException(status_code=500, detail="Login failed")
+# --- OAuth Login Rewrite ---
 
-@router.post("/apple-login", response_model=SuccessResponse)
-def apple_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
+@router.get("/login/{provider}")
+async def login_via_provider(provider: str, request: Request, next: str = "/"):
     """
-    Apple 登录接口
+    Initiate OAuth login for provider (google, apple)
     """
     try:
-        id_info = SocialAuthService.verify_apple_token(request.token)
-        email = id_info.get('email')
-        if not email:
-             raise HTTPException(status_code=400, detail="Email not found in token")
+        request.session['next'] = next
+        client = SocialAuthService.get_oauth_client(provider)
+        # Build redirect URI: e.g. https://domain.com/api/auth/callback/google
+        # Ensure _external=True (or absolute URI) is used if behind proxy, handled by starlette_client usually if configured correctly
+        redirect_uri = request.url_for('auth_callback', provider=provider)
         
-        # Check DB
+        logger.info(f"Initiating {provider} login.")
+        logger.info(f"Generated Redirect URI: {redirect_uri}")
+        logger.info(f"Client ID used: {client.client_id}")
+        
+        # Add prompt='select_account' for Google to force account selection
+        kwargs = {}
+        if provider == 'google':
+            kwargs['prompt'] = 'select_account'
+            
+        return await client.authorize_redirect(request, redirect_uri, **kwargs)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"OAuth init error: {e}")
+        raise HTTPException(status_code=500, detail="Authentication initiation failed")
+
+@router.get("/callback/{provider}")
+async def auth_callback(provider: str, request: Request, db: Session = Depends(get_db)):
+    """
+    Handle OAuth callback
+    """
+    try:
+        client = SocialAuthService.get_oauth_client(provider)
+        token = await client.authorize_access_token(request)
+        
+        user_info = token.get('userinfo')
+        if not user_info and 'id_token' in token:
+            user_info = await client.parse_id_token(request, token)
+
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Failed to get user info")
+
+        email = user_info.get('email')
+        if not email:
+            raise HTTPException(status_code=400, detail="Email not found in user info")
+
+        # Check/Create User
         user = db.query(User).filter(User.email == email).first()
         if not user:
-            # Register user
             user = User(
                 email=email,
-                username=email.split("@")[0],
+                username=user_info.get('name') or email.split("@")[0],
                 is_active=True,
                 created_at=datetime.now(),
-                quota=3, # Default quota
+                quota=3,
                 password=None
             )
             db.add(user)
             db.commit()
             db.refresh(user)
-        
-        # Create access token
+
+        # Create Access Token
         access_token = create_access_token(data={"sub": user.email})
         
-        return SuccessResponse(data=UserResponse(
+        # Prepare User Data (Same structure as login response)
+        user_response = UserResponse(
             id=str(user.id),
             username=user.username,
             email=user.email,
@@ -252,11 +248,43 @@ def apple_login(request: SocialLoginRequest, db: Session = Depends(get_db)):
             vipLevel=user.vip_level,
             vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
             accessToken=access_token
-        ))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException as he:
-        raise he
+        )
+        
+        # Redirect to frontend with token and user data
+        import json
+        import urllib.parse
+        
+        next_path = request.session.pop('next', '/')
+        
+        # Force /google_login_successed if provider is google and next is default
+        if provider == 'google' and next_path == '/':
+            next_path = '/google_login_successed'
+            
+        # If next_path is relative, prepend FRONTEND_URL
+        if not next_path.startswith(('http://', 'https://')):
+            # Ensure FRONTEND_URL doesn't end with slash if next_path starts with slash
+            base_url = settings.FRONTEND_URL.rstrip('/')
+            path = next_path.lstrip('/')
+            redirect_url = f"{base_url}/{path}"
+        else:
+            redirect_url = next_path
+            
+        # Serialize user data
+        user_data_json = json.dumps(user_response.model_dump())
+        encoded_user_data = urllib.parse.quote(user_data_json)
+        
+        return RedirectResponse(url=f"{redirect_url}?token={access_token}&user={encoded_user_data}")
+
     except Exception as e:
-        logger.error(f"Apple login error: {e}")
-        raise HTTPException(status_code=500, detail="Login failed")
+        logger.error(f"OAuth callback error: {e}")
+        # Redirect to frontend with error
+        next_path = request.session.pop('next', '/')
+        
+        if not next_path.startswith(('http://', 'https://')):
+            base_url = settings.FRONTEND_URL.rstrip('/')
+            path = next_path.lstrip('/')
+            redirect_url = f"{base_url}/{path}"
+        else:
+            redirect_url = next_path
+            
+        return RedirectResponse(url=f"{redirect_url}?error=auth_failed&message={str(e)}")

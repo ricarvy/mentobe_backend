@@ -38,7 +38,12 @@ class Settings(BaseSettings):
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
     APPLE_CLIENT_ID: str
+    APPLE_CLIENT_SECRET: str
+    
+    # Frontend Config
+    FRONTEND_URL: str = "http://localhost:8899"
     
     model_config = SettingsConfigDict(env_file=".env.local", extra="ignore")
 
