@@ -175,83 +175,91 @@ def get_quota(userId: str, current_user: UserResponse = Depends(get_current_user
 @router.get("/login/{provider}")
 async def login_via_provider(provider: str, request: Request, next: str = "/"):
     """
-    Initiate OAuth login for provider (google, apple)
+    Initiate OAuth login for provider (google)
     """
     try:
         request.session['next'] = next
-        client = SocialAuthService.get_oauth_client(provider)
-        # Build redirect URI: e.g. https://domain.com/api/auth/callback/google
-        # Ensure _external=True (or absolute URI) is used if behind proxy, handled by starlette_client usually if configured correctly
         
+        # Determine redirect URI
         if settings.API_BASE_URL:
             redirect_uri = f"{settings.API_BASE_URL.rstrip('/')}/api/auth/callback/{provider}"
         else:
-            redirect_uri = request.url_for('auth_callback', provider=provider)
-        
+            redirect_uri = str(request.url_for('auth_callback', provider=provider))
+            
         logger.info(f"Initiating {provider} login.")
         logger.info(f"Generated Redirect URI: {redirect_uri}")
-        logger.info(f"Client ID used: {client.client_id}")
         
-        # Add prompt='select_account' for Google to force account selection
-        kwargs = {}
         if provider == 'google':
-            kwargs['prompt'] = 'select_account'
-        
-        state = secrets.token_urlsafe(16)
-        kwargs['state'] = state
-        response = await client.authorize_redirect(request, redirect_uri, **kwargs)
-        secure = True if (settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")) else False
-        response.set_cookie(
-            key=f"oauth_state_{provider}",
-            value=state,
-            domain=".mentobe.co" if secure else None,
-            secure=secure,
-            httponly=True,
-            samesite="none" if secure else "lax"
-        )
-        return response
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+            state = secrets.token_urlsafe(16)
+            auth_url = SocialAuthService.get_google_auth_url(redirect_uri, state)
+            
+            response = RedirectResponse(url=auth_url)
+            
+            # Set state cookie for CSRF protection
+            secure = True if (settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")) else False
+            response.set_cookie(
+                key=f"oauth_state_{provider}",
+                value=state,
+                domain=".mentobe.co" if secure else None,
+                secure=secure,
+                httponly=True,
+                samesite="lax"
+            )
+            return response
+            
+        elif provider == 'apple':
+            # TODO: Implement manual Apple flow
+            raise HTTPException(status_code=501, detail="Apple login temporarily unavailable")
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported provider")
+            
     except Exception as e:
         logger.error(f"OAuth init error: {e}")
-        raise HTTPException(status_code=500, detail="Authentication initiation failed")
+        raise HTTPException(status_code=500, detail=f"Authentication initiation failed: {str(e)}")
 
 @router.get("/callback/{provider}")
 async def auth_callback(provider: str, request: Request, db: Session = Depends(get_db)):
-    """
-    Handle OAuth callback
-    """
     try:
-        logger.info(f"OAuth callback for {provider}")
-        logger.info(f"Request URL: {request.url}")
-        logger.info(f"Session keys: {list(request.session.keys())}")
-        logger.info(f"Headers: {request.headers}")
-        
-        client = SocialAuthService.get_oauth_client(provider)
+        # Validate CSRF State
         cookie_state = request.cookies.get(f"oauth_state_{provider}")
-        if cookie_state:
-            request.session[f"oauth_{provider}_state"] = cookie_state
-        elif 'state' in request.query_params:
-            request.session[f"oauth_{provider}_state"] = request.query_params['state']
-        token = await client.authorize_access_token(request)
+        query_state = request.query_params.get("state")
         
-        user_info = token.get('userinfo')
-        if not user_info and 'id_token' in token:
-            user_info = await client.parse_id_token(request, token)
-
-        if not user_info:
-            raise HTTPException(status_code=400, detail="Failed to get user info")
-
+        if not cookie_state:
+             logger.error("State cookie missing")
+             raise HTTPException(status_code=400, detail="State cookie missing. Please enable cookies.")
+             
+        if not query_state or query_state != cookie_state:
+            logger.error(f"State mismatch: cookie={cookie_state}, query={query_state}")
+            raise HTTPException(status_code=400, detail="CSRF Warning! State mismatch.")
+            
+        # Process Callback
+        code = request.query_params.get("code")
+        if not code:
+            raise HTTPException(status_code=400, detail="Authorization code missing")
+            
+        if settings.API_BASE_URL:
+            redirect_uri = f"{settings.API_BASE_URL.rstrip('/')}/api/auth/callback/{provider}"
+        else:
+            redirect_uri = str(request.url_for('auth_callback', provider=provider))
+            
+        user_info = {}
+        if provider == 'google':
+            user_info = await SocialAuthService.exchange_google_code(code, redirect_uri)
+        else:
+             raise HTTPException(status_code=400, detail="Unsupported provider")
+             
+        # User Logic (Create/Get)
         email = user_info.get('email')
         if not email:
-            raise HTTPException(status_code=400, detail="Email not found in user info")
-
-        # Check/Create User
+            raise HTTPException(status_code=400, detail="Email not found in provider response")
+            
         user = db.query(User).filter(User.email == email).first()
         if not user:
+            # Register new user
+            username = user_info.get('name') or email.split("@")[0]
             user = User(
                 email=email,
-                username=user_info.get('name') or email.split("@")[0],
+                username=username,
                 is_active=True,
                 created_at=datetime.now(),
                 quota=3,
@@ -260,11 +268,14 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
             db.add(user)
             db.commit()
             db.refresh(user)
-
-        # Create Access Token
+            logger.info(f"New social user registered: {email}")
+        else:
+            logger.info(f"Existing social user logged in: {email}")
+            
+        # Create Token
         access_token = create_access_token(data={"sub": user.email})
         
-        # Prepare User Data (Same structure as login response)
+        # Prepare User Data
         user_response = UserResponse(
             id=str(user.id),
             username=user.username,
@@ -277,39 +288,39 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
             accessToken=access_token
         )
         
-        # Redirect to frontend with token and user data
+        # Redirect
         import json
         import urllib.parse
         
         next_path = request.session.pop('next', '/')
         
-        # Force /google_login_successed if provider is google and next is default
         if provider == 'google' and next_path == '/':
             next_path = '/google_login_successed'
             
-        # If next_path is relative, prepend FRONTEND_URL
         if not next_path.startswith(('http://', 'https://')):
-            # Ensure FRONTEND_URL doesn't end with slash if next_path starts with slash
             base_url = settings.FRONTEND_URL.rstrip('/')
             path = next_path.lstrip('/')
             redirect_url = f"{base_url}/{path}"
         else:
             redirect_url = next_path
             
-        # Serialize user data
         user_data_json = json.dumps(user_response.model_dump())
         encoded_user_data = urllib.parse.quote(user_data_json)
         
-        final_resp = RedirectResponse(url=f"{redirect_url}?token={access_token}&user={encoded_user_data}")
+        final_url = f"{redirect_url}?token={access_token}&user={encoded_user_data}"
+        if '?' in redirect_url:
+             final_url = f"{redirect_url}&token={access_token}&user={encoded_user_data}"
+             
+        response = RedirectResponse(url=final_url)
+        
         secure = True if (settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")) else False
-        final_resp.delete_cookie(key=f"oauth_state_{provider}", domain=".mentobe.co" if secure else None)
-        return final_resp
+        response.delete_cookie(key=f"oauth_state_{provider}", domain=".mentobe.co" if secure else None)
+        
+        return response
 
     except Exception as e:
         logger.error(f"OAuth callback error: {e}")
-        # Redirect to frontend with error
         next_path = request.session.pop('next', '/')
-        
         if not next_path.startswith(('http://', 'https://')):
             base_url = settings.FRONTEND_URL.rstrip('/')
             path = next_path.lstrip('/')
@@ -317,7 +328,11 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         else:
             redirect_url = next_path
             
-        err_resp = RedirectResponse(url=f"{redirect_url}?error=auth_failed&message={str(e)}")
+        error_url = f"{redirect_url}?error=auth_failed&message={str(e)}"
+        if '?' in redirect_url:
+            error_url = f"{redirect_url}&error=auth_failed&message={str(e)}"
+            
+        response = RedirectResponse(url=error_url)
         secure = True if (settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")) else False
-        err_resp.delete_cookie(key=f"oauth_state_{provider}", domain=".mentobe.co" if secure else None)
-        return err_resp
+        response.delete_cookie(key=f"oauth_state_{provider}", domain=".mentobe.co" if secure else None)
+        return response
