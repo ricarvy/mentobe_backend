@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     
     # Frontend Config
     FRONTEND_URL: str = "http://localhost:8899"
+    API_BASE_URL: str | None = None
     
     model_config = SettingsConfigDict(env_file=".env.local", extra="ignore")
 

@@ -181,7 +181,11 @@ async def login_via_provider(provider: str, request: Request, next: str = "/"):
         client = SocialAuthService.get_oauth_client(provider)
         # Build redirect URI: e.g. https://domain.com/api/auth/callback/google
         # Ensure _external=True (or absolute URI) is used if behind proxy, handled by starlette_client usually if configured correctly
-        redirect_uri = request.url_for('auth_callback', provider=provider)
+        
+        if settings.API_BASE_URL:
+            redirect_uri = f"{settings.API_BASE_URL.rstrip('/')}/api/auth/callback/{provider}"
+        else:
+            redirect_uri = request.url_for('auth_callback', provider=provider)
         
         logger.info(f"Initiating {provider} login.")
         logger.info(f"Generated Redirect URI: {redirect_uri}")
