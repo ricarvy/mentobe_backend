@@ -43,8 +43,8 @@ class Settings(BaseSettings):
     APPLE_CLIENT_SECRET: str
     
     # Frontend Config
-    FRONTEND_URL: str = "http://localhost:8899"
-    API_BASE_URL: str | None = None
+    FRONTEND_URL: str
+    API_BASE_URL: str
     
     model_config = SettingsConfigDict(env_file=".env.local", extra="ignore")
 
