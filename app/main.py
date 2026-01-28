@@ -50,13 +50,14 @@ from starlette.middleware.sessions import SessionMiddleware
 
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
 
-# Proxy Headers Middleware (Ensure this is first/early to handle IPs/Schemes correctly)
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+# Determine if running on HTTPS
+is_https = settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")
 
-# Session Middleware
-app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+# Middleware Stack (constructed in reverse order of addition)
+# We want: ProxyHeaders -> Session -> CORS -> App
+# So we add: CORS, then Session, then ProxyHeaders
 
-# CORS
+# CORS (Inner-most of these three, but handles OPTIONS requests)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -64,6 +65,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Session Middleware
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=settings.SECRET_KEY, 
+    https_only=is_https, 
+    same_site="lax"
+)
+
+# Proxy Headers Middleware (Outer-most, ensures scheme is correct for Session)
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 # Routers
 app.include_router(auth.router, prefix="/api")
