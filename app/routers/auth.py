@@ -15,6 +15,7 @@ from app.services.auth_social import SocialAuthService
 from app.utils.security import create_access_token
 from datetime import datetime
 import logging
+import secrets
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -195,8 +196,20 @@ async def login_via_provider(provider: str, request: Request, next: str = "/"):
         kwargs = {}
         if provider == 'google':
             kwargs['prompt'] = 'select_account'
-            
-        return await client.authorize_redirect(request, redirect_uri, **kwargs)
+        
+        state = secrets.token_urlsafe(16)
+        kwargs['state'] = state
+        response = await client.authorize_redirect(request, redirect_uri, **kwargs)
+        secure = True if (settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")) else False
+        response.set_cookie(
+            key=f"oauth_state_{provider}",
+            value=state,
+            domain=".mentobe.co" if secure else None,
+            secure=secure,
+            httponly=True,
+            samesite="none" if secure else "lax"
+        )
+        return response
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -215,6 +228,11 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         logger.info(f"Headers: {request.headers}")
         
         client = SocialAuthService.get_oauth_client(provider)
+        cookie_state = request.cookies.get(f"oauth_state_{provider}")
+        if cookie_state:
+            request.session[f"oauth_{provider}_state"] = cookie_state
+        elif 'state' in request.query_params:
+            request.session[f"oauth_{provider}_state"] = request.query_params['state']
         token = await client.authorize_access_token(request)
         
         user_info = token.get('userinfo')
@@ -282,7 +300,10 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         user_data_json = json.dumps(user_response.model_dump())
         encoded_user_data = urllib.parse.quote(user_data_json)
         
-        return RedirectResponse(url=f"{redirect_url}?token={access_token}&user={encoded_user_data}")
+        final_resp = RedirectResponse(url=f"{redirect_url}?token={access_token}&user={encoded_user_data}")
+        secure = True if (settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")) else False
+        final_resp.delete_cookie(key=f"oauth_state_{provider}", domain=".mentobe.co" if secure else None)
+        return final_resp
 
     except Exception as e:
         logger.error(f"OAuth callback error: {e}")
@@ -296,4 +317,7 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         else:
             redirect_url = next_path
             
-        return RedirectResponse(url=f"{redirect_url}?error=auth_failed&message={str(e)}")
+        err_resp = RedirectResponse(url=f"{redirect_url}?error=auth_failed&message={str(e)}")
+        secure = True if (settings.API_BASE_URL and settings.API_BASE_URL.startswith("https://")) else False
+        err_resp.delete_cookie(key=f"oauth_state_{provider}", domain=".mentobe.co" if secure else None)
+        return err_resp
