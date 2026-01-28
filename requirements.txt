@@ -19,3 +19,4 @@ cryptography
 google-auth
 pyjwt
 authlib
+itsdangerous
