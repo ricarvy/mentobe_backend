@@ -45,9 +45,13 @@ def setup_logging():
 
 setup_logging()
 
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
+
+# Proxy Headers Middleware (Ensure this is first/early to handle IPs/Schemes correctly)
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 # Session Middleware
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
