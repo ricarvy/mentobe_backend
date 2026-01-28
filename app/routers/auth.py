@@ -209,6 +209,10 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
     Handle OAuth callback
     """
     try:
+        logger.info(f"OAuth callback for {provider}")
+        logger.info(f"Request URL: {request.url}")
+        logger.info(f"Session keys: {list(request.session.keys())}")
+        
         client = SocialAuthService.get_oauth_client(provider)
         token = await client.authorize_access_token(request)
         
