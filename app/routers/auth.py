@@ -203,7 +203,7 @@ async def login_via_provider(provider: str, request: Request, next: str = "/"):
                 domain=".mentobe.co" if secure else None,
                 secure=secure,
                 httponly=True,
-                samesite="lax"
+                 samesite="none" if secure else "lax"
             )
             return response
             
