@@ -71,7 +71,8 @@ app.add_middleware(
     SessionMiddleware, 
     secret_key=settings.SECRET_KEY, 
     https_only=is_https, 
-    same_site="lax"
+    same_site="none" if is_https else "lax",
+    domain=".mentobe.co" if is_https else None
 )
 
 # Proxy Headers Middleware (Outer-most, ensures scheme is correct for Session)
