@@ -130,7 +130,7 @@ async def stripe_webhook(request: Request):
         logger.error(f"Webhook error: Invalid payload: {e}")
         return {"success": False, "message": "Invalid payload"}
     except stripe.error.SignatureVerificationError as e:
-        logger.error(f"Webhook error: Invalid signature: {e}")
+        logger.error(f"CRITICAL: Webhook Signature Verification Failed! Check your STRIPE_WEBHOOK_SECRET in .env vs Stripe Dashboard/CLI. Error: {e}")
         return {"success": False, "message": "Invalid signature"}
 
     if event["type"] == "checkout.session.completed":
@@ -172,18 +172,52 @@ def _handle_checkout_completed_sync(session: dict):
     # Try to get price_id from metadata
     price_id = session.get("metadata", {}).get("priceId")
     
-    if not user_id or not price_id:
-        logger.error(f"Missing user_id or price_id in session. user_id: {user_id}, price_id: {price_id}, metadata: {session.get('metadata')}")
-        return
-
-    vip_level, duration_days = get_vip_info(price_id)
-    
-    if vip_level == 0:
-        logger.error(f"Invalid VIP level 0 for price_id: {price_id}. Configured prices: ProM={settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY}, ProY={settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY}, PreM={settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY}, PreY={settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY}")
-        # We still record the payment for audit, but mark as unknown/failed logic maybe?
-    
     db = SessionLocal()
     try:
+        # Fallback: Try to find user by email if user_id is missing
+        if not user_id:
+            customer_email = session.get("customer_details", {}).get("email") or session.get("customer_email")
+            if customer_email:
+                logger.info(f"Looking up user by email: {customer_email}")
+                user = db.query(User).filter(User.email == customer_email).first()
+                if user:
+                    user_id = user.id
+                    logger.info(f"Found user {user_id} by email {customer_email}")
+                else:
+                    logger.warning(f"User with email {customer_email} not found")
+        
+        # Fallback: Try to fetch price_id from line_items if missing
+        if not price_id:
+            logger.info("price_id missing from metadata, attempting to retrieve from line_items...")
+            try:
+                # We need to retrieve the session again with line_items expanded
+                # Check if line_items are already in the session object (sometimes they are)
+                # But typically 'checkout.session.completed' does NOT contain line_items unless expanded.
+                # However, we can use the stripe library to retrieve it.
+                if settings.STRIPE_SECRET_KEY:
+                    expanded_session = stripe.checkout.Session.retrieve(
+                        session["id"],
+                        expand=["line_items"],
+                        api_key=settings.STRIPE_SECRET_KEY
+                    )
+                    if expanded_session.line_items and expanded_session.line_items.data:
+                        price_id = expanded_session.line_items.data[0].price.id
+                        logger.info(f"Retrieved price_id from line_items: {price_id}")
+            except Exception as e:
+                logger.error(f"Failed to retrieve line_items from Stripe: {e}")
+
+        if not user_id or not price_id:
+            msg = f"CRITICAL: Payment successful but failed to identify User or Product. Manual intervention required. Session ID: {session.get('id')}, Email: {session.get('customer_details', {}).get('email')}, Metadata: {session.get('metadata')}. Action: Payment successful but database not updated. Please contact administrator."
+            logger.error(msg)
+            return
+
+        vip_level, duration_days = get_vip_info(price_id)
+        
+        if vip_level == 0:
+            msg = f"CRITICAL: Payment successful for Price ID {price_id} but it does not map to a valid VIP level. Check Stripe Price IDs in config. Session ID: {session.get('id')}. Action: Payment successful but database not updated. Please contact administrator."
+            logger.error(msg)
+            # We still record the payment for audit, but mark as unknown/failed logic maybe?
+        
         # 1. Insert into payments table
         payment = Payment(
             user_id=user_id,
@@ -239,7 +273,7 @@ def _handle_checkout_completed_sync(session: dict):
                          # For now: Log warning and maybe extend if we want to be generous, 
                          # or just let them have the lower tier after the higher one expires (complex).
                          # Simple approach: If new level is lower, we DON'T downgrade active high-tier user.
-                         logger.warning(f"User {user_id} bought lower tier {vip_level} while having active tier {current_vip_level}. Ignoring downgrade.")
+                         logger.warning(f"ALERT: User {user_id} purchased lower tier {vip_level} (Current: {current_vip_level}). VIP update skipped to prevent downgrade.")
                          should_update = False 
                 else:
                     # No active subscription or expired
@@ -254,12 +288,14 @@ def _handle_checkout_completed_sync(session: dict):
                     logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
 
             else:
-                logger.error(f"User {user_id} not found in database")
+                msg = f"CRITICAL: Payment successful for User ID {user_id} but user record NOT FOUND in database. Payment recorded but VIP not updated. Action: Payment successful but database not updated. Please contact administrator."
+                logger.error(msg)
         
         db.commit()
 
     except Exception as e:
-        logger.error(f"Failed to handle checkout completion: {e}")
+        msg = f"CRITICAL: Unexpected error processing payment for User {user_id if 'user_id' in locals() else 'Unknown'}: {e}. Action: Payment successful but database not updated. Please contact administrator."
+        logger.error(msg, exc_info=True)
         db.rollback()
     finally:
         db.close()
