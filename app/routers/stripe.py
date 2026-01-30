@@ -139,6 +139,14 @@ async def stripe_webhook(request: Request):
 
     return {"success": True}
 
+@router.get("/webhook")
+async def stripe_webhook_get():
+    """
+    Stripe Webhook GET Endpoint
+    To prevent 405 Method Not Allowed error when accessing via browser
+    """
+    return {"message": "This is a Stripe webhook endpoint. Please use POST."}
+
 def get_vip_info(price_id: str):
     """
     Helper to get VIP level and duration based on price_id
