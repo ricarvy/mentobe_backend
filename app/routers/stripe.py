@@ -109,6 +109,52 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
             "message": str(e)
         })
 
+@router.get("/payment-status/{session_id}")
+async def check_payment_status(session_id: str):
+    """
+    Check payment status by Stripe Session ID.
+    Returns:
+    - completed: Payment processed and recorded in DB.
+    - waiting_for_webhook: Payment successful at Stripe but DB not updated yet.
+    - pending: Payment not yet completed.
+    - failed: Payment failed or expired.
+    - not_found: Session ID not found.
+    """
+    db = SessionLocal()
+    try:
+        # 1. Check local DB
+        payment = db.query(Payment).filter(Payment.stripe_session_id == session_id).first()
+        if payment:
+            return {"status": "completed", "vip_level": payment.vip_level}
+        
+        # 2. Check Stripe API
+        if not settings.STRIPE_SECRET_KEY:
+             return {"status": "unknown", "message": "Stripe key not configured"}
+
+        try:
+            session = stripe.checkout.Session.retrieve(session_id, api_key=settings.STRIPE_SECRET_KEY)
+            payment_status = session.get("payment_status")
+            status = session.get("status")
+            
+            if payment_status == "paid":
+                # Paid but not in DB yet -> Waiting for webhook
+                return {"status": "waiting_for_webhook"}
+            elif status == "open":
+                return {"status": "pending"}
+            elif status == "expired":
+                return {"status": "failed"}
+            else:
+                return {"status": session.get("status")}
+                
+        except stripe.error.InvalidRequestError:
+            return {"status": "not_found"}
+            
+    except Exception as e:
+        logger.error(f"Error checking payment status: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     """
@@ -123,14 +169,22 @@ async def stripe_webhook(request: Request):
         return {"success": False, "message": "Webhook secret not configured"}
 
     try:
+        # Log the raw payload for debugging (truncated)
+        logger.info(f"Webhook received. Header: {sig_header[:20]}...")
+        
         event = stripe.Webhook.construct_event(
             payload, sig_header, webhook_secret
         )
+        logger.info(f"Webhook signature verified. Event type: {event['type']}")
+        
     except ValueError as e:
         logger.error(f"Webhook error: Invalid payload: {e}")
         return {"success": False, "message": "Invalid payload"}
     except stripe.error.SignatureVerificationError as e:
         logger.error(f"CRITICAL: Webhook Signature Verification Failed! Check your STRIPE_WEBHOOK_SECRET in .env vs Stripe Dashboard/CLI. Error: {e}")
+        # Log which secret was used (masked)
+        secret_masked = webhook_secret[:5] + "..." + webhook_secret[-5:] if webhook_secret else "None"
+        logger.error(f"Used Secret: {secret_masked}")
         return {"success": False, "message": "Invalid signature"}
 
     if event["type"] == "checkout.session.completed":
@@ -234,6 +288,9 @@ def _handle_checkout_completed_sync(session: dict):
         print(f"✅ [Payment Updated] User: {user_id}, Amount: {session.get('amount_total')}, Status: {session.get('payment_status')}")
         logger.info(f"Payment recorded for user {user_id}")
         
+        vip_update_status = "Not Attempted"
+        vip_update_reason = "VIP Level is 0 (Unknown Price ID)" if vip_level == 0 else "Unknown"
+
         # 2. Update user VIP status ONLY if vip_level > 0
         if vip_level > 0:
             now = datetime.now(timezone.utc)
@@ -263,21 +320,27 @@ def _handle_checkout_completed_sync(session: dict):
                          # Upgrade: Overwrite level and reset time (or add time? usually reset for upgrade)
                          # Let's say upgrade starts fresh from today
                          should_update = True
+                         vip_update_reason = "Upgrade"
                     elif vip_level == current_vip_level:
                          # Same level: Extend
                          new_expire_at = current_expire_at + timedelta(days=duration_days)
                          should_update = True
+                         vip_update_reason = "Extension"
                     else:
                          # Downgrade attempt while active (e.g. bought Basic while Pro is active)
                          # Business decision: Do we stack? Do we ignore?
                          # For now: Log warning and maybe extend if we want to be generous, 
                          # or just let them have the lower tier after the higher one expires (complex).
                          # Simple approach: If new level is lower, we DON'T downgrade active high-tier user.
-                         logger.warning(f"ALERT: User {user_id} purchased lower tier {vip_level} (Current: {current_vip_level}). VIP update skipped to prevent downgrade.")
+                         msg = f"ALERT: User {user_id} purchased lower tier {vip_level} (Current: {current_vip_level}). VIP update skipped to prevent downgrade. Action: Payment successful but database not updated. Please contact administrator if this is an error."
+                         logger.warning(msg)
                          should_update = False 
+                         vip_update_status = "Skipped"
+                         vip_update_reason = f"Downgrade prevention (Current: {current_vip_level}, New: {vip_level})"
                 else:
                     # No active subscription or expired
                     should_update = True
+                    vip_update_reason = "New Subscription"
 
                 if should_update:
                     user.vip_level = vip_level
@@ -286,12 +349,27 @@ def _handle_checkout_completed_sync(session: dict):
                     db.add(user)
                     print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
                     logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
+                    vip_update_status = "Success"
 
             else:
                 msg = f"CRITICAL: Payment successful for User ID {user_id} but user record NOT FOUND in database. Payment recorded but VIP not updated. Action: Payment successful but database not updated. Please contact administrator."
                 logger.error(msg)
+                vip_update_status = "Failed"
+                vip_update_reason = "User Not Found"
         
         db.commit()
+        
+        # --- Final Verification Log ---
+        try:
+            db.refresh(payment)
+            log_msg = f"[Payment Verification] PaymentID: {payment.id}, Status: {payment.status}, VIP Update: {vip_update_status} ({vip_update_reason})"
+            if vip_update_status == "Success":
+                 logger.info(f"✅ NORMAL: {log_msg}")
+            else:
+                 logger.critical(f"❌ ABNORMAL: {log_msg}. Action: Check database consistency.")
+        except Exception as verify_e:
+             logger.error(f"Error during payment verification logging: {verify_e}")
+        # ------------------------------
 
     except Exception as e:
         msg = f"CRITICAL: Unexpected error processing payment for User {user_id if 'user_id' in locals() else 'Unknown'}: {e}. Action: Payment successful but database not updated. Please contact administrator."
