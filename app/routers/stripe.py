@@ -167,18 +167,19 @@ def _handle_checkout_completed_sync(session: dict):
     """
     Sync handler for checkout completion
     """
-    user_id = session.get("client_reference_id")
+    # Prefer client_reference_id, fallback to metadata.userId
+    user_id = session.get("client_reference_id") or session.get("metadata", {}).get("userId")
     # Try to get price_id from metadata
     price_id = session.get("metadata", {}).get("priceId")
     
     if not user_id or not price_id:
-        logger.error("Missing user_id or price_id in session metadata")
+        logger.error(f"Missing user_id or price_id in session. user_id: {user_id}, price_id: {price_id}, metadata: {session.get('metadata')}")
         return
 
     vip_level, duration_days = get_vip_info(price_id)
     
     if vip_level == 0:
-        logger.error(f"Invalid VIP level 0 for price_id: {price_id}. Skipping user update.")
+        logger.error(f"Invalid VIP level 0 for price_id: {price_id}. Configured prices: ProM={settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY}, ProY={settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY}, PreM={settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY}, PreY={settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY}")
         # We still record the payment for audit, but mark as unknown/failed logic maybe?
     
     db = SessionLocal()
