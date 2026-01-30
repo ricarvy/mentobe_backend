@@ -210,21 +210,49 @@ def _handle_checkout_completed_sync(session: dict):
                 current_vip_level = user.vip_level or 0
                 current_expire_at = user.vip_expire_at
 
+                # Logic for VIP update:
+                # 1. If upgrading (higher level), overwrite level and expiry (restart duration)
+                # 2. If same level, extend expiry
+                # 3. If downgrading (lower level), this logic might need business rule clarification, 
+                #    but typically we shouldn't downgrade until current high-tier expires. 
+                #    For now, we'll assume new purchase overrides if it's an upgrade or same level.
+                
+                should_update = False
+                
                 if current_expire_at:
                     if current_expire_at.tzinfo is None:
                         current_expire_at = current_expire_at.replace(tzinfo=timezone.utc)
-                    
-                    # If same level and not expired, extend
-                    if current_vip_level == vip_level and current_expire_at > now:
-                        new_expire_at = current_expire_at + timedelta(days=duration_days)
                 
-                user.vip_level = vip_level
-                user.vip_expire_at = new_expire_at
-                user.quota = 999999
-                
-                db.add(user)
-                print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
-                logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
+                if current_expire_at and current_expire_at > now:
+                    # User has active subscription
+                    if vip_level > current_vip_level:
+                         # Upgrade: Overwrite level and reset time (or add time? usually reset for upgrade)
+                         # Let's say upgrade starts fresh from today
+                         should_update = True
+                    elif vip_level == current_vip_level:
+                         # Same level: Extend
+                         new_expire_at = current_expire_at + timedelta(days=duration_days)
+                         should_update = True
+                    else:
+                         # Downgrade attempt while active (e.g. bought Basic while Pro is active)
+                         # Business decision: Do we stack? Do we ignore?
+                         # For now: Log warning and maybe extend if we want to be generous, 
+                         # or just let them have the lower tier after the higher one expires (complex).
+                         # Simple approach: If new level is lower, we DON'T downgrade active high-tier user.
+                         logger.warning(f"User {user_id} bought lower tier {vip_level} while having active tier {current_vip_level}. Ignoring downgrade.")
+                         should_update = False 
+                else:
+                    # No active subscription or expired
+                    should_update = True
+
+                if should_update:
+                    user.vip_level = vip_level
+                    user.vip_expire_at = new_expire_at
+                    user.quota = 999999
+                    db.add(user)
+                    print(f"✅ [User Updated] User: {user_id}, New Level: {vip_level}, Expires: {new_expire_at}, Quota: 999999")
+                    logger.info(f"User {user_id} VIP updated to level {vip_level}, expires {new_expire_at}")
+
             else:
                 logger.error(f"User {user_id} not found in database")
         
