@@ -143,8 +143,14 @@ async def check_payment_status(session_id: str):
             status = session.get("status")
             
             if payment_status == "paid":
-                # Paid but not in DB yet -> Waiting for webhook
-                return {"status": "waiting_for_webhook"}
+                # Paid but not in DB yet -> Trigger manual update
+                logger.info(f"Payment {session_id} verified via API. Triggering manual sync.")
+                try:
+                    await handle_checkout_completed(session)
+                    return {"status": "completed", "source": "api_verification"}
+                except Exception as e:
+                    logger.error(f"Manual sync failed: {e}")
+                    return {"status": "waiting_for_webhook", "error": str(e)}
             elif status == "open":
                 return {"status": "pending"}
             elif status == "expired":
