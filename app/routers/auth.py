@@ -141,20 +141,46 @@ def login(request: LoginRequest, db: Session = Depends(get_db), authorization: O
         user = db.query(User).filter(User.email == request.email).first()
         if not user:
              logger.warning(f"Login failed: User not found for {request.email}")
-             raise HTTPException(status_code=401, detail="邮箱或密码错误")
+             raise HTTPException(
+                 status_code=401, 
+                 detail={
+                     "code": "AUTH_INVALID_CREDENTIALS",
+                     "message": "邮箱或密码错误"
+                 }
+             )
         
+        # Check if active
+        if not user.is_active:
+            logger.warning(f"Login failed: Inactive user {request.email}")
+            raise HTTPException(
+                status_code=403, 
+                detail={
+                    "code": "AUTH_ACCOUNT_DISABLED",
+                    "message": "账号已被禁用，请联系管理员"
+                }
+            )
+
         # Check if user is a social login user (no password)
         if not user.password:
             logger.warning(f"Login failed: Social user {request.email} tried password login")
             # Return 403 Forbidden with specific code for frontend to trigger popup
             raise HTTPException(
                 status_code=403, 
-                detail="SOCIAL_LOGIN_REQUIRED: Please use social login"
+                detail={
+                    "code": "AUTH_SOCIAL_ACCOUNT",
+                    "message": "该邮箱为第三方登录邮箱，请使用第三方登录"
+                }
             )
 
         if not verify_password(request.password, user.password):
             logger.warning(f"Login failed: Invalid password for {request.email}")
-            raise HTTPException(status_code=401, detail="邮箱或密码错误")
+            raise HTTPException(
+                status_code=401, 
+                detail={
+                    "code": "AUTH_INVALID_CREDENTIALS",
+                    "message": "邮箱或密码错误"
+                }
+            )
             
         logger.info(f"User {user.id} logged in successfully")
         
