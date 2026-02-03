@@ -61,6 +61,9 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                 # Fetch latest data to return correct VIP status
                 # demo_user is already refreshed or fetched
                 
+                # Create token for demo user
+                access_token = create_access_token(data={"sub": demo_user.email})
+
                 return SuccessResponse(data=UserResponse(
                     id=str(demo_user.id),
                     username=demo_user.username,
@@ -69,18 +72,21 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                     isDemo=True,
                     unlimitedQuota=True,
                     vipLevel=demo_user.vip_level,
-                    vipExpireAt=demo_user.vip_expire_at.isoformat() if demo_user.vip_expire_at else None
+                    vipExpireAt=demo_user.vip_expire_at.isoformat() if demo_user.vip_expire_at else None,
+                    accessToken=access_token
                 ))
             except Exception as e:
                 logger.error(f"Failed to sync demo user to DB: {e}")
                 # Fallback to in-memory response if DB fails, though payments might fail
+                access_token = create_access_token(data={"sub": request.email})
                 return SuccessResponse(data=UserResponse(
                     id="demo-user-id",
                     username="Demo User",
                     email=request.email,
                     isActive=True,
                     isDemo=True,
-                    unlimitedQuota=True
+                    unlimitedQuota=True,
+                    accessToken=access_token
                 ))
     
     # Check DB

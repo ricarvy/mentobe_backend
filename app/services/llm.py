@@ -2,8 +2,97 @@ import httpx
 import json
 from app.config import settings
 import logging
+import base64
 
 logger = logging.getLogger(__name__)
+
+async def stream_palm_analysis(image_bytes: bytes, prompt: str):
+    """
+    Stream palm analysis from LLM using Volcengine compatible /chat/completions endpoint.
+    This uses the standard OpenAI multimodal format.
+    
+    Args:
+        image_bytes: Raw image bytes
+        prompt: System/User prompt text
+        
+    Yields:
+        str: Content chunks
+    """
+    try:
+        logger.info(f"Calling LLM model for Palm Analysis: {settings.LLM_MODEL}")
+        
+        # Encode image
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # Construct messages
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    }
+                ]
+            }
+        ]
+        
+        # Determine URL (standardize to /chat/completions)
+        raw_url = settings.ARK_BASE_URL.strip().strip('"').strip("'")
+        if not raw_url.startswith("http"):
+             raw_url = f"https://{raw_url}"
+        
+        url = raw_url.rstrip('/')
+        # If the existing URL ends with /responses (as used in tarot), strip it to get base
+        if url.endswith('/responses'):
+            url = url[:-10]
+        
+        if not url.endswith('/chat/completions'):
+             url = f"{url}/chat/completions"
+             
+        headers = {
+            "Authorization": f"Bearer {settings.ARK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": settings.LLM_MODEL,
+            "messages": messages,
+            "stream": True,
+            "temperature": settings.LLM_TEMPERATURE
+        }
+        
+        async with httpx.AsyncClient(timeout=120.0) as client: # Longer timeout for image analysis
+            async with client.stream("POST", url, headers=headers, json=payload) as response:
+                if response.status_code != 200:
+                    error_text = await response.aread()
+                    logger.error(f"LLM API Error: {response.status_code} - {error_text.decode()}")
+                    yield f"\n[System Error: AI service returned {response.status_code}.]"
+                    return
+
+                async for line in response.aiter_lines():
+                    if line.startswith("data:"):
+                        line = line[5:].strip()
+                        if line == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(line)
+                            if "choices" in data and len(data["choices"]) > 0:
+                                delta = data["choices"][0].get("delta", {})
+                                if "content" in delta:
+                                    yield delta["content"]
+                        except json.JSONDecodeError:
+                            continue
+                            
+    except Exception as e:
+        logger.error(f"Palm Analysis LLM call failed: {e}")
+        yield f"\n[System Error: Failed to analyze palm. Please try again later. Error: {str(e)}]"
 
 async def stream_tarot_interpretation(messages: list):
     """

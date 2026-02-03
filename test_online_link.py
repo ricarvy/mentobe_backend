@@ -12,10 +12,8 @@ API_BASE = "https://api.mentobe.co"
 WEBHOOK_TARGET = "https://api.mentobe.co/api/stripe/webhook" # User specified
 
 # Keys from .env.local (Test Mode)
-# STRIPE_WEBHOOK_SECRET = "whsec_NUd81BfIEM2COWvsOYcksNRnuqKpRhug" # Test Secret
-STRIPE_WEBHOOK_SECRET = "whsec_zYMs6WfJtOy4SoJmfe1Hc8PnRyv7V12H" # Live Secret (Trying this as Test failed)
-# PRICE_ID = "price_1Sren7GVP93aj81Tr4d18z2S" # Test Pro Monthly
-PRICE_ID = "price_1Sv8CpJLkngja4kbsTzSSAfi" # Live Pro Monthly (Server likely in Live mode)
+STRIPE_WEBHOOK_SECRET = "whsec_380arvQQOrWFrU3pTbKxZ0fVfYcU3hLT"
+PRICE_ID = "price_1Sv8CpJLkngja4kbsTzSSAfi"
 
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
