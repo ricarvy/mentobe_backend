@@ -55,6 +55,12 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
     if request.price_id in subscription_prices:
         mode = "subscription"
 
+    # Append session_id to success_url if not present
+    success_url = request.success_url
+    if "{CHECKOUT_SESSION_ID}" not in success_url:
+        separator = "&" if "?" in success_url else "?"
+        success_url = f"{success_url}{separator}session_id={{CHECKOUT_SESSION_ID}}"
+
     try:
         async with httpx.AsyncClient() as client:
             stripe_response = await client.post(
@@ -68,7 +74,7 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
                     "payment_method_types[0]": "card",
                     "line_items[0][price]": request.price_id,
                     "line_items[0][quantity]": 1,
-                    "success_url": request.success_url,
+                    "success_url": success_url,
                     "cancel_url": request.cancel_url,
                     "customer_email": request.user_email,
                     "client_reference_id": request.user_id,
