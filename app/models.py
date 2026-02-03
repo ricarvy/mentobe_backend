@@ -39,6 +39,7 @@ class UserResponse(BaseModel):
     vipLevel: Optional[int] = 0
     vipExpireAt: Optional[Union[datetime, str]] = None
     accessToken: Optional[str] = None
+    loginToken: Optional[str] = None
 
 class SocialLoginRequest(BaseModel):
     token: str

@@ -63,7 +63,15 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                 # demo_user is already refreshed or fetched
                 
                 # Create token for demo user
-                access_token = create_access_token(data={"sub": demo_user.email})
+                login_token = "demo-login-token" # Fixed token for demo user to simplify
+                # demo_user is in DB, we can update it too if we want, but demo user might be shared?
+                # If demo user is shared, we shouldn't enforce single session strictness or we use a unique demo ID per session.
+                # But the code uses a fixed UUID. 
+                # Let's assume demo user doesn't need strict session check or we update it anyway.
+                demo_user.login_token = login_token
+                db.commit()
+                
+                access_token = create_access_token(data={"sub": demo_user.email, "login_token": login_token})
 
                 return SuccessResponse(data=UserResponse(
                     id=str(demo_user.id),
@@ -74,12 +82,14 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                     unlimitedQuota=True,
                     vipLevel=demo_user.vip_level,
                     vipExpireAt=demo_user.vip_expire_at.isoformat() if demo_user.vip_expire_at else None,
-                    accessToken=access_token
+                    accessToken=access_token,
+                    loginToken=login_token
                 ))
             except Exception as e:
                 logger.error(f"Failed to sync demo user to DB: {e}")
                 # Fallback to in-memory response if DB fails, though payments might fail
-                access_token = create_access_token(data={"sub": request.email})
+                login_token = "demo-login-token-fallback"
+                access_token = create_access_token(data={"sub": request.email, "login_token": login_token})
                 return SuccessResponse(data=UserResponse(
                     id="demo-user-id",
                     username="Demo User",
@@ -87,7 +97,8 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                     isActive=True,
                     isDemo=True,
                     unlimitedQuota=True,
-                    accessToken=access_token
+                    accessToken=access_token,
+                    loginToken=login_token
                 ))
     
     # Check DB
@@ -112,8 +123,13 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             
         logger.info(f"User {user.id} logged in successfully")
         
+        # Generate new login token
+        login_token = secrets.token_urlsafe(32)
+        user.login_token = login_token
+        db.commit()
+        
         # Create Access Token
-        access_token = create_access_token(data={"sub": user.email})
+        access_token = create_access_token(data={"sub": user.email, "login_token": login_token})
         
         return SuccessResponse(data=UserResponse(
             id=str(user.id),
@@ -124,7 +140,8 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
             vipLevel=user.vip_level,
             vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
-            accessToken=access_token
+            accessToken=access_token,
+            loginToken=login_token
         ))
     except HTTPException as he:
         raise he
@@ -148,11 +165,13 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         hashed_pw = get_password_hash(request.password)
         username = request.email.split("@")[0]
         
+        login_token = secrets.token_urlsafe(32)
         new_user = User(
             email=request.email,
             password=hashed_pw,
             username=username,
             login_type="email",
+            login_token=login_token,
             is_active=True,
             created_at=datetime.now(),
             quota=3
@@ -168,7 +187,8 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             id=str(new_user.id),
             username=new_user.username,
             email=new_user.email,
-            isActive=new_user.is_active
+            isActive=new_user.is_active,
+            loginToken=login_token
         ))
         
     except Exception as e:
@@ -280,6 +300,7 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         user = db.query(User).filter(User.email == email).first()
         if not user:
             # Register new user
+            login_token = secrets.token_urlsafe(32)
             username = user_info.get('name') or email.split("@")[0]
             user = User(
                 email=email,
@@ -288,7 +309,8 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
                 created_at=datetime.now(),
                 quota=3,
                 password=None,
-                login_type=provider
+                login_type=provider,
+                login_token=login_token
             )
             db.add(user)
             db.commit()
@@ -297,8 +319,13 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         else:
             logger.info(f"Existing social user logged in: {email}")
             
+            # Generate new login token
+            login_token = secrets.token_urlsafe(32)
+            user.login_token = login_token
+            db.commit()
+            
         # Create Token
-        access_token = create_access_token(data={"sub": user.email})
+        access_token = create_access_token(data={"sub": user.email, "login_token": login_token})
         
         # Prepare User Data
         user_response = UserResponse(
@@ -310,7 +337,8 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
             unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
             vipLevel=user.vip_level,
             vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
-            accessToken=access_token
+            accessToken=access_token,
+            loginToken=login_token
         )
         
         # Redirect

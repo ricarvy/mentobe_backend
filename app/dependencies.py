@@ -48,6 +48,15 @@ def get_current_user(
                 # Check DB
                 user = db.query(User).filter(User.email == email).first()
                 if user:
+                    # Check login_token consistency if user has one
+                    token_login_token = payload.get("login_token")
+                    if user.login_token and token_login_token != user.login_token:
+                         raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Session expired or invalid. Please login again.",
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+
                     return UserResponse(
                         id=str(user.id),
                         username=user.username,
