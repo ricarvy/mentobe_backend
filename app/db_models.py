@@ -11,6 +11,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True)
     username = Column(String(255), nullable=True)
     password = Column(String(255), nullable=True)
+    login_type = Column(String(50), default="email")
     is_active = Column(Boolean, default=True)
     quota = Column(Integer, default=3)
     vip_level = Column(Integer, default=0)

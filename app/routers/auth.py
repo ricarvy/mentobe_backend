@@ -48,6 +48,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                         email=request.email,
                         password=get_password_hash(request.password),
                         username="Demo User",
+                        login_type="email",
                         is_active=True,
                         created_at=datetime.now(),
                         quota=999999,
@@ -151,6 +152,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             email=request.email,
             password=hashed_pw,
             username=username,
+            login_type="email",
             is_active=True,
             created_at=datetime.now(),
             quota=3
@@ -285,7 +287,8 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
                 is_active=True,
                 created_at=datetime.now(),
                 quota=3,
-                password=None
+                password=None,
+                login_type=provider
             )
             db.add(user)
             db.commit()
