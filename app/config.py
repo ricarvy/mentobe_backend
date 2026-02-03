@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Auth Config
     SECRET_KEY: str
     ALGORITHM: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
     APPLE_CLIENT_ID: str

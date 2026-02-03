@@ -96,6 +96,11 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
              logger.warning(f"Login failed: User not found for {request.email}")
              raise HTTPException(status_code=401, detail="邮箱或密码错误")
         
+        # Check if user is a social login user (no password)
+        if not user.password:
+            logger.warning(f"Login failed: Social user {request.email} tried password login")
+            raise HTTPException(status_code=400, detail="该账号是通过第三方方式（如Google）注册的，请使用第三方登录")
+
         if not verify_password(request.password, user.password):
             logger.warning(f"Login failed: Invalid password for {request.email}")
             raise HTTPException(status_code=401, detail="邮箱或密码错误")
