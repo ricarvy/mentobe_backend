@@ -99,7 +99,11 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         # Check if user is a social login user (no password)
         if not user.password:
             logger.warning(f"Login failed: Social user {request.email} tried password login")
-            raise HTTPException(status_code=400, detail="该账号是通过第三方方式（如Google）注册的，请使用第三方登录")
+            # Return 403 Forbidden with specific code for frontend to trigger popup
+            raise HTTPException(
+                status_code=403, 
+                detail="SOCIAL_LOGIN_REQUIRED: Please use social login"
+            )
 
         if not verify_password(request.password, user.password):
             logger.warning(f"Login failed: Invalid password for {request.email}")
@@ -180,6 +184,13 @@ def get_quota(userId: str, current_user: UserResponse = Depends(get_current_user
         return SuccessResponse(data=quota_info)
     except Exception as e:
         return ErrorResponse(success=False, error={"code": "INTERNAL_ERROR", "message": str(e)})
+
+@router.get("/me", response_model=SuccessResponse)
+def get_current_user_info(current_user: UserResponse = Depends(get_current_user)):
+    """
+    获取当前登录用户信息 (用于持久化登录验证)
+    """
+    return SuccessResponse(data=current_user)
 
 # --- OAuth Login Rewrite ---
 
