@@ -13,6 +13,7 @@ class User(Base):
     password = Column(String(255), nullable=True)
     login_type = Column(String(50), default="email")
     login_token = Column(String(255), nullable=True)
+    login_token_updated_at = Column(DateTime(timezone=True), nullable=True)
     is_active = Column(Boolean, default=True)
     quota = Column(Integer, default=3)
     vip_level = Column(Integer, default=0)

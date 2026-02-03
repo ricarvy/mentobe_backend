@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from fastapi.responses import RedirectResponse
 from app.models import (
     LoginRequest, RegisterRequest, UserResponse, 
@@ -12,7 +13,7 @@ from app.db_models import User
 from app.config import settings
 from app.services.quota import QuotaService
 from app.services.auth_social import SocialAuthService
-from app.utils.security import create_access_token
+from app.utils.security import create_access_token, decode_access_token
 from datetime import datetime
 import logging
 import secrets
@@ -23,13 +24,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=SuccessResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
+def login(request: LoginRequest, db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
     """
     用户登录接口
     支持演示账号和普通账号
     """
     logger.info(f"Login attempt for email: {request.email}")
     
+    # Debug logging for token presence
+    if authorization:
+        print(f"Login Request Token: {authorization}")
+    else:
+        print("Login Request: 没有token")
+
+    # 0. Check for existing valid token (Bypass login if consistent)
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            token = authorization.split(" ")[1]
+            payload = decode_access_token(token)
+            if payload and payload.get("sub") == request.email:
+                user = db.query(User).filter(User.email == request.email).first()
+                # Check consistency
+                token_login_token = payload.get("login_token")
+                if user and user.login_token and token_login_token == user.login_token:
+                     logger.info(f"User {user.email} re-verified via token. Skipping password check.")
+                     return SuccessResponse(data=UserResponse(
+                        id=str(user.id),
+                        username=user.username,
+                        email=user.email,
+                        isActive=user.is_active,
+                        isDemo=False,
+                        unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
+                        vipLevel=user.vip_level,
+                        vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None,
+                        accessToken=token, # Return existing token
+                        loginToken=user.login_token
+                    ))
+        except Exception as e:
+            logger.warning(f"Token verification in login failed: {e}")
+            # Continue to normal login flow
+
     # Check demo account
     if settings.DEMO_ACCOUNT_ENABLED and request.email == settings.DEMO_ACCOUNT_EMAIL:
         if request.password == settings.DEMO_ACCOUNT_PASSWORD:
@@ -69,6 +103,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                 # But the code uses a fixed UUID. 
                 # Let's assume demo user doesn't need strict session check or we update it anyway.
                 demo_user.login_token = login_token
+                demo_user.login_token_updated_at = datetime.now()
                 db.commit()
                 
                 access_token = create_access_token(data={"sub": demo_user.email, "login_token": login_token})
@@ -126,6 +161,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         # Generate new login token
         login_token = secrets.token_urlsafe(32)
         user.login_token = login_token
+        user.login_token_updated_at = datetime.now()
         db.commit()
         
         # Create Access Token
@@ -172,6 +208,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             username=username,
             login_type="email",
             login_token=login_token,
+            login_token_updated_at=datetime.now(),
             is_active=True,
             created_at=datetime.now(),
             quota=3
@@ -310,7 +347,8 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
                 quota=3,
                 password=None,
                 login_type=provider,
-                login_token=login_token
+                login_token=login_token,
+                login_token_updated_at=datetime.now()
             )
             db.add(user)
             db.commit()
@@ -322,10 +360,11 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
             # Generate new login token
             login_token = secrets.token_urlsafe(32)
             user.login_token = login_token
+            user.login_token_updated_at = datetime.now()
             db.commit()
-            
-        # Create Token
-        access_token = create_access_token(data={"sub": user.email, "login_token": login_token})
+        
+        # 4. Generate JWT
+        access_token = create_access_token(data={"sub": email, "login_token": login_token})
         
         # Prepare User Data
         user_response = UserResponse(
