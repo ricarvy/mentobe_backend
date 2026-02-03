@@ -79,6 +79,7 @@ def list_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), a
             "email": u.email,
             "quota": u.quota,
             "vip_level": u.vip_level,
+            "vip_expire_at": u.vip_expire_at,
             "created_at": u.created_at,
             "last_active": None # Add if tracked
         })
