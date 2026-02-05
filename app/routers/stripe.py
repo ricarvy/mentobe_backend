@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import SessionLocal
 from sqlalchemy.orm import Session
 from app.db_models import User, Payment, SystemConfig
+from app.services.stripe_service import fetch_price_details
 import httpx
 import logging
 import json
@@ -45,42 +46,12 @@ async def get_stripe_config():
     finally:
         db.close()
 
-    async def fetch_price(pid):
-        if not pid:
-            return None
-            
-        # If secret key is missing, return minimal info
-        if not settings.STRIPE_SECRET_KEY:
-            return {"id": pid, "amount": 0, "currency": "unknown"}
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{settings.STRIPE_API_BASE}/v1/prices/{pid}",
-                    headers={"Authorization": f"Bearer {settings.STRIPE_SECRET_KEY}"},
-                    timeout=10.0
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    unit_amount = data.get("unit_amount", 0)
-                    currency = data.get("currency", "usd")
-                    return {
-                        "id": pid,
-                        "unit_amount": unit_amount,
-                        "amount": unit_amount / 100.0 if unit_amount else 0,
-                        "currency": currency.upper()
-                    }
-        except Exception as e:
-            logger.error(f"Error fetching price {pid}: {e}")
-        
-        return {"id": pid, "amount": 0, "currency": "unknown", "error": "fetch_failed"}
-
     # Fetch all prices in parallel
     tasks = []
     keys = []
     for key, pid in price_ids.items():
         keys.append(key)
-        tasks.append(fetch_price(pid))
+        tasks.append(fetch_price_details(pid))
     
     results = await asyncio.gather(*tasks)
     

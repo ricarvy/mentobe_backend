@@ -7,8 +7,10 @@ from app.db_models import User, Payment, TarotInterpretation, AdminUser, SystemC
 from app.dependencies import verify_password
 from app.config import settings
 from app.models import UserResponse, SuccessResponse, ErrorResponse, LoginRequest
+from app.services.stripe_service import fetch_price_details
 from pydantic import BaseModel
 from datetime import datetime
+import asyncio
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -75,7 +77,7 @@ def admin_login(request: LoginRequest, db: Session = Depends(get_db)):
 # 0. System Configuration Management
 
 @router.get("/configs", response_model=SuccessResponse)
-def list_configs(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+async def list_configs(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
     # Return all price related configs, populate with defaults from settings if not in DB
     keys = [
         "NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY",
@@ -85,15 +87,47 @@ def list_configs(db: Session = Depends(get_db), admin: AdminUser = Depends(get_c
     ]
     
     configs = []
+    fetch_tasks = []
+    
     for key in keys:
         db_config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
         default_val = getattr(settings, key, "")
-        configs.append({
+        val = db_config.value if db_config else default_val
+        
+        config_item = {
             "key": key,
-            "value": db_config.value if db_config else default_val,
+            "value": val,
             "is_overridden": db_config is not None,
-            "default_value": default_val
-        })
+            "default_value": default_val,
+            "price_details": None
+        }
+        configs.append(config_item)
+        
+        # Add task to fetch details if value exists
+        if val:
+            fetch_tasks.append(fetch_price_details(val))
+        else:
+            fetch_tasks.append(None) # Placeholder to keep index alignment
+            
+    # Fetch all prices in parallel
+    # Filter out None tasks but keep track of indices or just use gather and handle None in result
+    # Actually, asyncio.gather can handle coroutines. If I pass None it will fail.
+    # So I need to wrap None in a dummy coroutine or filter.
+    
+    async def dummy_fetch(): return None
+    
+    real_tasks = []
+    for t in fetch_tasks:
+        if t:
+            real_tasks.append(t)
+        else:
+            real_tasks.append(dummy_fetch())
+            
+    results = await asyncio.gather(*real_tasks)
+    
+    # Merge results back
+    for i, res in enumerate(results):
+        configs[i]["price_details"] = res
     
     return SuccessResponse(data=configs)
 

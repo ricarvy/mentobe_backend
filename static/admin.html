@@ -99,6 +99,7 @@
                 <tr>
                     <th>Key</th>
                     <th>Current Value (Effective)</th>
+                    <th>Price</th>
                     <th>Default (.env)</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -351,10 +352,23 @@
         res.data.forEach(c => {
             const statusColor = c.is_overridden ? 'green' : 'gray';
             const statusText = c.is_overridden ? 'Overridden (DB)' : 'Default (Env)';
+            
+            let priceInfo = '<span style="color:#999;font-style:italic;">-</span>';
+            if (c.price_details) {
+                if (c.price_details.status === 'active') {
+                    priceInfo = `<span style="color:green;font-weight:bold;">${c.price_details.amount} ${c.price_details.currency}</span>`;
+                } else if (c.price_details.status === 'api_error') {
+                    priceInfo = `<span style="color:red;" title="${c.price_details.error_detail}">Error</span>`;
+                } else if (c.price_details.status === 'no_secret_key') {
+                    priceInfo = '<span style="color:orange;">No Secret</span>';
+                }
+            }
+            
             tbody.innerHTML += `
                 <tr>
                     <td><div style="font-weight:bold; font-size:12px;">${c.key}</div></td>
                     <td><input type="text" id="cfg-val-${c.key}" value="${c.value || ''}" style="width: 100%; box-sizing: border-box; padding: 5px;"></td>
+                    <td>${priceInfo}</td>
                     <td style="font-family:monospace; color:#666; font-size:12px;">${c.default_value || '(empty)'}</td>
                     <td style="color:${statusColor}; font-size:12px;">${statusText}</td>
                     <td>
