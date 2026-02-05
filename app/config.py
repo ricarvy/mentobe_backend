@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+from typing import Optional
 
 class Settings(BaseSettings):
     # Database
@@ -32,8 +33,8 @@ class Settings(BaseSettings):
     NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY: str
     NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY: str
     NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY: str
-    NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY: str | None = None
-    NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY: str | None = None
+    NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY: Optional[str] = None
+    NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY: Optional[str] = None
     
     # Auth Config
     SECRET_KEY: str
