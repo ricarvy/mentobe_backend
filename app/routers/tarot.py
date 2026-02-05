@@ -175,6 +175,25 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
     2. 如果有配额，调用 LLM 生成流式响应
     """
     logger.info(f"Received interpret request from user {current_user.id}")
+
+    # 0. Check VIP Spread Restrictions
+    # Free (0): <= 3 cards
+    # Pro (1): <= 6 cards
+    # Premium (2): Unlimited
+    card_count = len(request.cards)
+    vip_level = current_user.vipLevel or 0
+    
+    if vip_level == 0 and card_count > 3:
+        return ErrorResponse(success=False, error={
+            "code": "VIP_LEVEL_TOO_LOW", 
+            "message": "Free users are limited to spreads with 3 cards or less. Please upgrade to Pro."
+        })
+    
+    if vip_level == 1 and card_count > 6:
+        return ErrorResponse(success=False, error={
+            "code": "VIP_LEVEL_TOO_LOW", 
+            "message": "Pro users are limited to spreads with 6 cards or less. Please upgrade to Premium."
+        })
     
     # 1. Check Quota
     if not current_user.unlimitedQuota:
