@@ -87,6 +87,8 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
     # Determine mode based on price_id
     mode = "payment"
     subscription_prices = [
+        pro_monthly,
+        pro_yearly,
         premium_monthly,
         premium_yearly
     ]
