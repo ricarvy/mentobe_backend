@@ -368,13 +368,16 @@
                     let currencyDisplay = '';
                     if (c.price_details.currencies && c.price_details.currencies.length > 0) {
                         currencyDisplay = c.price_details.currencies.map(curr => 
-                            `${curr.amount} ${curr.currency}`
-                        ).join(', ');
+                            `<div style="border-bottom: 1px dashed #eee; padding: 2px 0;">
+                                <span style="font-weight:bold;">${curr.amount}</span> 
+                                <span style="color:#666;font-size:11px;">${curr.currency}</span>
+                            </div>`
+                        ).join('');
                     } else {
                         currencyDisplay = `${c.price_details.amount} ${c.price_details.currency}`;
                     }
 
-                    priceInfo = `<div><span style="color:green;font-weight:bold;">${currencyDisplay}</span>${typeInfo}</div>`;
+                    priceInfo = `<div>${currencyDisplay}${typeInfo}</div>`;
                 } else if (c.price_details.status === 'api_error') {
                     priceInfo = `<span style="color:red;" title="${c.price_details.error_detail}">Error</span>`;
                 } else if (c.price_details.status === 'no_secret_key') {
