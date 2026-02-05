@@ -205,7 +205,7 @@
     }
 
     function switchTab(tab) {
-        ['users', 'payments', 'interpretations'].forEach(t => {
+        ['users', 'payments', 'interpretations', 'configs'].forEach(t => {
             document.getElementById('view-' + t).classList.add('hidden');
         });
         document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -216,6 +216,7 @@
         if (tab === 'users') loadUsers();
         if (tab === 'payments') loadPayments();
         if (tab === 'interpretations') loadInterpretations();
+        if (tab === 'configs') loadConfigs();
     }
 
     async function apiCall(url, method = 'GET', body = null) {
