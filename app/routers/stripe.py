@@ -84,19 +84,14 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
     finally:
         db.close()
 
-    # Determine mode based on price_id
+    # Determine mode by inspecting price details from Stripe
     mode = "payment"
-    subscription_prices = [
-        pro_monthly,
-        pro_yearly,
-        premium_monthly,
-        premium_yearly
-    ]
-    # Filter out None values just in case
-    subscription_prices = [p for p in subscription_prices if p]
-    
-    if request.price_id in subscription_prices:
-        mode = "subscription"
+    try:
+        price_details = await fetch_price_details(request.price_id)
+        if price_details and price_details.get("type") == "recurring":
+            mode = "subscription"
+    except Exception:
+        pass
 
     # Append session_id to success_url if not present
     success_url = request.success_url
