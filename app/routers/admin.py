@@ -3,8 +3,9 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.db_models import User, Payment, TarotInterpretation, AdminUser
+from app.db_models import User, Payment, TarotInterpretation, AdminUser, SystemConfig
 from app.dependencies import verify_password
+from app.config import settings
 from app.models import UserResponse, SuccessResponse, ErrorResponse, LoginRequest
 from pydantic import BaseModel
 from datetime import datetime
@@ -52,6 +53,11 @@ class AdminInterpretationResponse(BaseModel):
     question: Optional[str]
     created_at: datetime
 
+class SystemConfigUpdate(BaseModel):
+    key: str
+    value: str
+    description: Optional[str] = None
+
 # --- Routes ---
 
 @router.post("/login", response_model=SuccessResponse)
@@ -65,6 +71,45 @@ def admin_login(request: LoginRequest, db: Session = Depends(get_db)):
         "username": admin.username,
         "role": admin.role
     })
+
+# 0. System Configuration Management
+
+@router.get("/configs", response_model=SuccessResponse)
+def list_configs(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    # Return all price related configs, populate with defaults from settings if not in DB
+    keys = [
+        "NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY",
+        "NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY",
+        "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY",
+        "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY"
+    ]
+    
+    configs = []
+    for key in keys:
+        db_config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+        default_val = getattr(settings, key, "")
+        configs.append({
+            "key": key,
+            "value": db_config.value if db_config else default_val,
+            "is_overridden": db_config is not None,
+            "default_value": default_val
+        })
+    
+    return SuccessResponse(data=configs)
+
+@router.post("/configs", response_model=SuccessResponse)
+def update_config(config: SystemConfigUpdate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    db_config = db.query(SystemConfig).filter(SystemConfig.key == config.key).first()
+    if not db_config:
+        db_config = SystemConfig(key=config.key, value=config.value, description=config.description)
+        db.add(db_config)
+    else:
+        db_config.value = config.value
+        if config.description:
+            db_config.description = config.description
+    
+    db.commit()
+    return SuccessResponse(data={"message": "Config updated"})
 
 # 1. Users Management
 

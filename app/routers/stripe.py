@@ -6,7 +6,7 @@ from app.models import (
 from app.config import settings
 from app.database import SessionLocal
 from sqlalchemy.orm import Session
-from app.db_models import User, Payment
+from app.db_models import User, Payment, SystemConfig
 import httpx
 import logging
 import json
@@ -21,17 +21,29 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
 
+# Helper function to get config (DB first, then Env)
+def get_config_value(db: Session, key: str, default: str = None) -> str:
+    config = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    if config and config.value:
+        return config.value
+    return default
+
 @router.get("/config", response_model=SuccessResponse)
 async def get_stripe_config():
     """
     获取 Stripe 配置（包含价格详情）
     """
-    price_ids = {
-        "pro_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
-        "pro_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY,
-        "premium_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY,
-        "premium_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY,
-    }
+    # Use a new DB session for config retrieval
+    db = SessionLocal()
+    try:
+        price_ids = {
+            "pro_monthly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY),
+            "pro_yearly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY),
+            "premium_monthly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY),
+            "premium_yearly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY),
+        }
+    finally:
+        db.close()
 
     async def fetch_price(pid):
         if not pid:
@@ -90,13 +102,26 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
         raise HTTPException(status_code=500, detail="Stripe configuration missing")
 
     logger.info(f"[Stripe API] Creating checkout session for user: {request.user_id}")
+    
+    # Get dynamic price configs
+    db = SessionLocal()
+    try:
+        pro_monthly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY)
+        pro_yearly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY)
+        premium_monthly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY)
+        premium_yearly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY)
+    finally:
+        db.close()
 
     # Determine mode based on price_id
     mode = "payment"
     subscription_prices = [
-        settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY,
-        settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY
+        premium_monthly,
+        premium_yearly
     ]
+    # Filter out None values just in case
+    subscription_prices = [p for p in subscription_prices if p]
+    
     if request.price_id in subscription_prices:
         mode = "subscription"
 
