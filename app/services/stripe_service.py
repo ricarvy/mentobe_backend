@@ -32,11 +32,34 @@ async def fetch_price_details(pid: str) -> Optional[Dict[str, Any]]:
                 recurring = data.get("recurring", {})
                 interval = recurring.get("interval") if recurring else None
                 
+                # Extract multi-currency options
+                currency_options = data.get("currency_options", {})
+                currencies = []
+                
+                # If currency_options exists, use it to populate the list
+                if currency_options:
+                    for code, details in currency_options.items():
+                        amt = details.get("unit_amount", 0)
+                        currencies.append({
+                            "currency": code.upper(),
+                            "amount": amt / 100.0 if amt is not None else 0
+                        })
+                else:
+                    # Fallback to single currency
+                    currencies.append({
+                        "currency": currency.upper(),
+                        "amount": unit_amount / 100.0 if unit_amount else 0
+                    })
+                
+                # Sort currencies by name for consistent display
+                currencies.sort(key=lambda x: x["currency"])
+                
                 return {
                     "id": pid,
                     "unit_amount": unit_amount,
                     "amount": unit_amount / 100.0 if unit_amount else 0,
                     "currency": currency.upper(),
+                    "currencies": currencies,
                     "type": price_type,
                     "interval": interval,
                     "status": "active"

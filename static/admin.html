@@ -365,7 +365,16 @@
                     } else {
                          typeInfo = `<br><span style="font-size:10px;background:#efe;padding:2px 4px;border-radius:3px;color:#0a0;display:inline-block;margin-top:2px;">One-time</span>`;
                     }
-                    priceInfo = `<div><span style="color:green;font-weight:bold;">${c.price_details.amount} ${c.price_details.currency}</span>${typeInfo}</div>`;
+                    let currencyDisplay = '';
+                    if (c.price_details.currencies && c.price_details.currencies.length > 0) {
+                        currencyDisplay = c.price_details.currencies.map(curr => 
+                            `${curr.amount} ${curr.currency}`
+                        ).join(', ');
+                    } else {
+                        currencyDisplay = `${c.price_details.amount} ${c.price_details.currency}`;
+                    }
+
+                    priceInfo = `<div><span style="color:green;font-weight:bold;">${currencyDisplay}</span>${typeInfo}</div>`;
                 } else if (c.price_details.status === 'api_error') {
                     priceInfo = `<span style="color:red;" title="${c.price_details.error_detail}">Error</span>`;
                 } else if (c.price_details.status === 'no_secret_key') {
