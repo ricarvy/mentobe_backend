@@ -47,8 +47,6 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
     # Determine mode based on price_id
     mode = "payment"
     subscription_prices = [
-        settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
-        settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY,
         settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY,
         settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY
     ]
