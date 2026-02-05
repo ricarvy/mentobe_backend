@@ -77,6 +77,7 @@
                     <th>Username</th>
                     <th>Quota</th>
                     <th>VIP Lvl</th>
+                    <th>VIP Expire</th>
                     <th>Created</th>
                     <th>Actions</th>
                 </tr>
@@ -253,6 +254,7 @@
                     <td>${u.username || '-'}</td>
                     <td>${u.quota}</td>
                     <td>${u.vip_level}</td>
+                    <td>${u.vip_expire_at ? new Date(u.vip_expire_at).toLocaleDateString() : '-'}</td>
                     <td>${new Date(u.created_at).toLocaleDateString()}</td>
                     <td>
                         <button class="action-btn btn-blue" onclick="editUser('${u.id}', ${u.quota}, ${u.vip_level})">Edit</button>
