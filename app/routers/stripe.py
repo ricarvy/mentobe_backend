@@ -12,6 +12,7 @@ import logging
 import json
 import os
 import stripe
+import asyncio
 from datetime import datetime, timedelta, timezone
 from fastapi.concurrency import run_in_threadpool
 
@@ -23,16 +24,62 @@ router = APIRouter(prefix="/stripe", tags=["stripe"])
 @router.get("/config", response_model=SuccessResponse)
 async def get_stripe_config():
     """
-    获取 Stripe 配置（公开价格 ID）
+    获取 Stripe 配置（包含价格详情）
     """
-    return SuccessResponse(data={
-        "prices": {
-            "pro_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
-            "pro_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY,
-            "premium_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY,
-            "premium_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY,
-        }
-    })
+    price_ids = {
+        "pro_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
+        "pro_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY,
+        "premium_monthly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY,
+        "premium_yearly": settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY,
+    }
+
+    async def fetch_price(pid):
+        if not pid:
+            return None
+            
+        # If secret key is missing, return minimal info
+        if not settings.STRIPE_SECRET_KEY:
+            return {"id": pid, "amount": 0, "currency": "unknown"}
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{settings.STRIPE_API_BASE}/v1/prices/{pid}",
+                    headers={"Authorization": f"Bearer {settings.STRIPE_SECRET_KEY}"},
+                    timeout=10.0
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    unit_amount = data.get("unit_amount", 0)
+                    currency = data.get("currency", "usd")
+                    return {
+                        "id": pid,
+                        "unit_amount": unit_amount,
+                        "amount": unit_amount / 100.0 if unit_amount else 0,
+                        "currency": currency.upper()
+                    }
+        except Exception as e:
+            logger.error(f"Error fetching price {pid}: {e}")
+        
+        return {"id": pid, "amount": 0, "currency": "unknown", "error": "fetch_failed"}
+
+    # Fetch all prices in parallel
+    tasks = []
+    keys = []
+    for key, pid in price_ids.items():
+        keys.append(key)
+        tasks.append(fetch_price(pid))
+    
+    results = await asyncio.gather(*tasks)
+    
+    prices_map = {}
+    for key, result in zip(keys, results):
+        if result:
+            prices_map[key] = result
+        else:
+            prices_map[key] = {"id": price_ids[key], "amount": 0, "currency": "unknown"}
+
+    return SuccessResponse(data={"prices": prices_map})
 
 @router.post("/create-checkout-session", response_model=SuccessResponse)
 async def create_checkout_session(request: CreateCheckoutSessionRequest):
