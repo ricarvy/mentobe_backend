@@ -106,6 +106,18 @@ class FollowupRequest(BaseModel):
 class FollowupResponse(BaseModel):
     questions: List[str]
 
+class SharerInfo(BaseModel):
+    username: Optional[str] = "Anonymous"
+
+class ShareInterpretationData(BaseModel):
+    id: str
+    question: Optional[str] = None
+    spreadType: Optional[str] = None
+    cards: str # JSON string
+    interpretation: Optional[str] = None
+    createdAt: datetime
+    sharerInfo: SharerInfo
+
 class HistoryResponse(BaseModel):
     interpretations: List[InterpretationRecord]
 

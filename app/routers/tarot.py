@@ -5,13 +5,14 @@ from app.models import (
     InterpretRequest, SuggestRequest, SuggestResponse, 
     HistoryResponse, SuccessResponse, ErrorResponse,
     InterpretationRecord, UserResponse,
-    FollowupRequest, FollowupResponse
+    FollowupRequest, FollowupResponse,
+    ShareInterpretationData, SharerInfo
 )
 from app.dependencies import get_current_user
 # from app.database import supabase # Removed
 from app.database import SessionLocal, get_db
 from sqlalchemy.orm import Session
-from app.db_models import TarotInterpretation
+from app.db_models import TarotInterpretation, User
 from app.config import settings
 from app.services.llm import stream_tarot_interpretation
 from app.services.quota import QuotaService
@@ -345,4 +346,46 @@ def history(userId: str, current_user: UserResponse = Depends(get_current_user),
         return SuccessResponse(data=HistoryResponse(interpretations=records))
     except Exception as e:
         logger.error(f"Error in history endpoint: {str(e)}", exc_info=True)
+        return ErrorResponse(success=False, error={"code": "DATABASE_ERROR", "message": str(e)})
+
+@router.get("/share/{id}", response_model=SuccessResponse)
+def get_share_interpretation(id: str, db: Session = Depends(get_db)):
+    """
+    获取分享的塔罗解读
+    无需登录，用于公开分享
+    """
+    try:
+        # id is Integer in DB but passed as str in URL
+        try:
+            record_id = int(id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+
+        item = db.query(TarotInterpretation).filter(TarotInterpretation.id == record_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Interpretation not found")
+            
+        # Get user info
+        user = db.query(User).filter(User.id == item.user_id).first()
+        username = user.username if user and user.username else "Anonymous"
+        
+        # Serialize cards
+        cards_str = json.dumps(item.cards) if item.cards else "[]"
+        
+        share_data = ShareInterpretationData(
+            id=str(item.id),
+            question=item.question,
+            spreadType=item.spread_type,
+            cards=cards_str,
+            interpretation=item.interpretation,
+            createdAt=item.created_at,
+            sharerInfo=SharerInfo(username=username)
+        )
+        
+        return SuccessResponse(data=share_data)
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error in share endpoint: {str(e)}", exc_info=True)
         return ErrorResponse(success=False, error={"code": "DATABASE_ERROR", "message": str(e)})
