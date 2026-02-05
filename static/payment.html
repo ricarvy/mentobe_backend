@@ -44,7 +44,7 @@
 
     <script>
         let currentUser = null;
-        let credentials = null;
+        let authToken = null;
 
         // Fetch prices on load
         async function fetchConfig() {
@@ -54,12 +54,33 @@
                 if (data.success) {
                     const prices = data.data.prices;
                     const select = document.getElementById('price-id');
-                    select.innerHTML = `
-                        <option value="${prices.pro_monthly}">Pro Monthly (${prices.pro_monthly})</option>
-                        <option value="${prices.pro_yearly}">Pro Yearly (${prices.pro_yearly})</option>
-                        <option value="${prices.premium_monthly}">Premium Monthly (${prices.premium_monthly})</option>
-                        <option value="${prices.premium_yearly}">Premium Yearly (${prices.premium_yearly})</option>
-                    `;
+                    let optionsHtml = '';
+                    
+                    // Define display order and labels
+                    const priceKeys = [
+                        { key: 'pro_monthly', label: 'Pro Monthly' },
+                        { key: 'pro_yearly', label: 'Pro Yearly' },
+                        { key: 'premium_monthly', label: 'Premium Monthly' },
+                        { key: 'premium_yearly', label: 'Premium Yearly' },
+                        { key: 'upgrade_monthly', label: 'Upgrade to Premium (Monthly)' },
+                        { key: 'upgrade_yearly', label: 'Upgrade to Premium (Yearly)' }
+                    ];
+
+                    priceKeys.forEach(item => {
+                        const priceData = prices[item.key];
+                        if (priceData && priceData.id) {
+                            optionsHtml += `<option value="${priceData.id}">${item.label} (${priceData.id})</option>`;
+                        }
+                    });
+
+                    // Fallback for any other keys not in the explicit list (optional, but good for debugging)
+                    Object.keys(prices).forEach(key => {
+                        if (!priceKeys.find(k => k.key === key) && prices[key] && prices[key].id) {
+                            optionsHtml += `<option value="${prices[key].id}">${key} (${prices[key].id})</option>`;
+                        }
+                    });
+
+                    select.innerHTML = optionsHtml;
                 }
             } catch (e) {
                 console.error("Failed to fetch config", e);
@@ -84,7 +105,7 @@
                 
                 if (data.success) {
                     currentUser = data.data;
-                    credentials = btoa(email + ':' + password);
+                    authToken = currentUser.accessToken;
                     document.getElementById('auth-status').innerText = 'Logged in as ' + currentUser.username;
                     document.getElementById('auth-status').style.color = 'green';
                     document.getElementById('payment-section').classList.remove('hidden');
@@ -110,7 +131,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': 'Basic ' + credentials
+                        'Authorization': 'Bearer ' + authToken
                     },
                     body: JSON.stringify({
                         price_id: priceId,

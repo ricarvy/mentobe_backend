@@ -51,7 +51,7 @@
 
     <script>
         let currentUser = null;
-        let credentials = null;
+        let authToken = null;
 
         async function login() {
             const email = document.getElementById('email').value;
@@ -68,7 +68,7 @@
                 
                 if (data.success) {
                     currentUser = data.data;
-                    credentials = btoa(email + ':' + password);
+                    authToken = currentUser.accessToken;
                     document.getElementById('auth-status').innerText = 'Logged in as ' + currentUser.username;
                     document.getElementById('auth-status').style.color = 'green';
                     document.getElementById('app-section').classList.remove('hidden');
@@ -87,7 +87,7 @@
             if (!currentUser) return;
             try {
                 const res = await fetch(`/api/auth/quota?userId=${currentUser.id}`, {
-                     headers: { 'Authorization': 'Basic ' + credentials }
+                     headers: { 'Authorization': 'Bearer ' + authToken }
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -114,7 +114,7 @@
         }
 
         async function interpret() {
-            if (!credentials) return alert('Please login first');
+            if (!authToken) return alert('Please login first');
             
             const question = document.getElementById('question').value;
             const resultDiv = document.getElementById('result');
@@ -137,7 +137,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': 'Basic ' + credentials
+                        'Authorization': 'Bearer ' + authToken
                     },
                     body: JSON.stringify({
                         userId: currentUser.id,

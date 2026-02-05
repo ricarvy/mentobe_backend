@@ -42,6 +42,8 @@ async def get_stripe_config():
             "pro_yearly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY),
             "premium_monthly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY),
             "premium_yearly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY),
+            "upgrade_monthly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY", getattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY", None)),
+            "upgrade_yearly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY", getattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY", None)),
         }
     finally:
         db.close()
@@ -77,10 +79,9 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
     # Get dynamic price configs
     db = SessionLocal()
     try:
-        pro_monthly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY)
-        pro_yearly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY)
-        premium_monthly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY)
-        premium_yearly = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY)
+        # We fetch these to potentially validate price IDs or use them for logic if needed
+        # But currently create_checkout_session mostly relies on the passed price_id
+        pass
     finally:
         db.close()
 
@@ -255,14 +256,33 @@ def get_vip_info(price_id: str):
     """
     Helper to get VIP level and duration based on price_id
     """
-    if price_id == settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY:
+    # Fetch dynamic configs again because this function is called from webhook context
+    # where we don't have them handy. 
+    # Note: Frequent DB calls in webhook are okay, but caching would be better.
+    # For now, let's keep it simple and safe by fetching fresh config.
+    db = SessionLocal()
+    try:
+        pro_m = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY)
+        pro_y = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY)
+        prem_m = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY)
+        prem_y = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY)
+        upg_m = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY", getattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY", None))
+        upg_y = get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY", getattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY", None))
+    finally:
+        db.close()
+
+    if price_id == pro_m:
         return 1, 30
-    elif price_id == settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY:
+    elif price_id == pro_y:
         return 1, 365
-    elif price_id == settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY:
+    elif price_id == prem_m:
         return 2, 30
-    elif price_id == settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_YEARLY:
+    elif price_id == prem_y:
         return 2, 365
+    elif price_id == upg_m:
+        return 2, 30  # Upgrade is effectively Premium
+    elif price_id == upg_y:
+        return 2, 365 # Upgrade is effectively Premium
     
     logger.warning(f"Unknown price_id: {price_id}")
     return 0, 0
@@ -344,7 +364,7 @@ def _handle_checkout_completed_sync(session: dict):
         # 2. Update user VIP status ONLY if vip_level > 0
         if vip_level > 0:
             now = datetime.now(timezone.utc)
-            new_expire_at = now + timedelta(days=duration_days)
+            # new_expire_at calculation deferred until we check user's current status
 
             user = db.query(User).filter(User.id == user_id).first()
             if user:
@@ -364,13 +384,16 @@ def _handle_checkout_completed_sync(session: dict):
                     if current_expire_at.tzinfo is None:
                         current_expire_at = current_expire_at.replace(tzinfo=timezone.utc)
                 
+                # Default new expiration (Now + Duration) - for new subs or expired
+                new_expire_at = now + timedelta(days=duration_days)
+
                 if current_expire_at and current_expire_at > now:
                     # User has active subscription
                     if vip_level > current_vip_level:
-                         # Upgrade: Overwrite level and reset time (or add time? usually reset for upgrade)
-                         # Let's say upgrade starts fresh from today
+                         # Upgrade: Per user request, add duration to ORIGINAL expiration date
+                         new_expire_at = current_expire_at + timedelta(days=duration_days)
                          should_update = True
-                         vip_update_reason = "Upgrade"
+                         vip_update_reason = "Upgrade (Extended)"
                     elif vip_level == current_vip_level:
                          # Same level: Extend
                          new_expire_at = current_expire_at + timedelta(days=duration_days)
