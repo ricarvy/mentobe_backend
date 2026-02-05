@@ -28,11 +28,17 @@ async def fetch_price_details(pid: str) -> Optional[Dict[str, Any]]:
                 data = response.json()
                 unit_amount = data.get("unit_amount", 0)
                 currency = data.get("currency", "usd")
+                price_type = data.get("type", "one_time")
+                recurring = data.get("recurring", {})
+                interval = recurring.get("interval") if recurring else None
+                
                 return {
                     "id": pid,
                     "unit_amount": unit_amount,
                     "amount": unit_amount / 100.0 if unit_amount else 0,
                     "currency": currency.upper(),
+                    "type": price_type,
+                    "interval": interval,
                     "status": "active"
                 }
             else:
