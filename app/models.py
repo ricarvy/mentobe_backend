@@ -101,6 +101,44 @@ class TarotCategoryResponse(TarotCategoryBase):
     class Config:
         from_attributes = True
 
+class TarotSpreadBase(BaseModel):
+    category_id: int
+    name: str
+    name_en: Optional[str] = None
+    name_jp: Optional[str] = None
+    description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_jp: Optional[str] = None
+    card_count: int = 1
+    permission: str = "Free" # Free, Pro, Premium
+    sort_order: Optional[int] = 0
+
+class TarotSpreadCreate(TarotSpreadBase):
+    pass
+
+class TarotSpreadUpdate(BaseModel):
+    category_id: Optional[int] = None
+    name: Optional[str] = None
+    name_en: Optional[str] = None
+    name_jp: Optional[str] = None
+    description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_jp: Optional[str] = None
+    card_count: Optional[int] = None
+    permission: Optional[str] = None
+    sort_order: Optional[int] = None
+
+class TarotSpreadResponse(TarotSpreadBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class TarotCategoryWithSpreadsResponse(TarotCategoryResponse):
+    spreads: List[TarotSpreadResponse] = []
+
 class InterpretRequest(BaseModel):
     userId: str
     question: str

@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import engine, Base
 # Import all models to ensure they are registered with Base
-from app.db_models import User, AdminUser, Payment, DailyQuota, TarotInterpretation, SystemConfig, TarotSpreadCategory
+from app.db_models import User, AdminUser, Payment, DailyQuota, TarotInterpretation, SystemConfig, TarotSpreadCategory, TarotSpread
 
 def update_schema():
     print("Updating database schema...")

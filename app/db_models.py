@@ -81,6 +81,25 @@ class SystemConfig(Base):
     description = Column(String(255), nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+class TarotSpread(Base):
+    __tablename__ = "tarot_spreads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category_id = Column(Integer, ForeignKey("tarot_spread_categories.id"))
+    name = Column(String(100), nullable=False)
+    name_en = Column(String(100), nullable=True)
+    name_jp = Column(String(100), nullable=True)
+    description = Column(String(255), nullable=True)
+    description_en = Column(String(255), nullable=True)
+    description_jp = Column(String(255), nullable=True)
+    card_count = Column(Integer, default=1)
+    permission = Column(String(50), default="Free") # Free, Pro, Premium
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    category = relationship("TarotSpreadCategory", back_populates="spreads")
+
 class TarotSpreadCategory(Base):
     __tablename__ = "tarot_spread_categories"
 
@@ -95,3 +114,5 @@ class TarotSpreadCategory(Base):
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    spreads = relationship("TarotSpread", back_populates="category", cascade="all, delete-orphan")

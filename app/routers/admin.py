@@ -3,12 +3,13 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.db_models import User, Payment, TarotInterpretation, AdminUser, SystemConfig, TarotSpreadCategory
+from app.db_models import User, Payment, TarotInterpretation, AdminUser, SystemConfig, TarotSpreadCategory, TarotSpread
 from app.dependencies import verify_password
 from app.config import settings
 from app.models import (
     UserResponse, SuccessResponse, ErrorResponse, LoginRequest,
-    TarotCategoryCreate, TarotCategoryUpdate, TarotCategoryResponse
+    TarotCategoryCreate, TarotCategoryUpdate, TarotCategoryResponse,
+    TarotSpreadCreate, TarotSpreadUpdate, TarotSpreadResponse
 )
 from app.services.stripe_service import fetch_price_details
 from pydantic import BaseModel
@@ -352,3 +353,100 @@ def delete_category(id: int, db: Session = Depends(get_db), admin: AdminUser = D
     db.delete(db_category)
     db.commit()
     return SuccessResponse(message="Category deleted")
+
+# --- Spread Management ---
+
+@router.post("/spreads", response_model=SuccessResponse)
+def create_spread(spread: TarotSpreadCreate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    # Verify category exists
+    category = db.query(TarotSpreadCategory).filter(TarotSpreadCategory.id == spread.category_id).first()
+    if not category:
+        raise HTTPException(status_code=400, detail="Category not found")
+
+    new_spread = TarotSpread(
+        category_id=spread.category_id,
+        name=spread.name,
+        name_en=spread.name_en,
+        name_jp=spread.name_jp,
+        description=spread.description,
+        description_en=spread.description_en,
+        description_jp=spread.description_jp,
+        card_count=spread.card_count,
+        permission=spread.permission,
+        sort_order=spread.sort_order
+    )
+    db.add(new_spread)
+    db.commit()
+    db.refresh(new_spread)
+    return SuccessResponse(data=TarotSpreadResponse.from_orm(new_spread))
+
+@router.get("/spreads", response_model=SuccessResponse)
+def list_spreads(category_id: Optional[int] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    query = db.query(TarotSpread)
+    if category_id:
+        query = query.filter(TarotSpread.category_id == category_id)
+    
+    # Order by category sort order then spread sort order
+    query = query.join(TarotSpread.category).order_by(TarotSpreadCategory.sort_order.asc(), TarotSpread.sort_order.asc())
+    
+    spreads = query.offset(skip).limit(limit).all()
+    return SuccessResponse(data=[TarotSpreadResponse.from_orm(s) for s in spreads])
+
+@router.put("/spreads/{id}", response_model=SuccessResponse)
+def update_spread(id: int, spread: TarotSpreadUpdate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    db_spread = db.query(TarotSpread).filter(TarotSpread.id == id).first()
+    if not db_spread:
+        raise HTTPException(status_code=404, detail="Spread not found")
+    
+    if spread.category_id is not None:
+        category = db.query(TarotSpreadCategory).filter(TarotSpreadCategory.id == spread.category_id).first()
+        if not category:
+            raise HTTPException(status_code=400, detail="Category not found")
+    
+    update_data = spread.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_spread, key, value)
+    
+    db.commit()
+    db.refresh(db_spread)
+    return SuccessResponse(data=TarotSpreadResponse.from_orm(db_spread))
+
+@router.delete("/spreads/{id}", response_model=SuccessResponse)
+def delete_spread(id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    db_spread = db.query(TarotSpread).filter(TarotSpread.id == id).first()
+    if not db_spread:
+        raise HTTPException(status_code=404, detail="Spread not found")
+    
+    db.delete(db_spread)
+    db.commit()
+    return SuccessResponse(message="Spread deleted successfully")
+
+@router.post("/spreads/{id}/move", response_model=SuccessResponse)
+def move_spread(id: int, direction: str, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    if direction not in ['up', 'down']:
+        raise HTTPException(status_code=400, detail="Invalid direction")
+    
+    spread = db.query(TarotSpread).filter(TarotSpread.id == id).first()
+    if not spread:
+        raise HTTPException(status_code=404, detail="Spread not found")
+    
+    category_id = spread.category_id
+    current_order = spread.sort_order
+    
+    if direction == 'up':
+        target = db.query(TarotSpread)\
+            .filter(TarotSpread.category_id == category_id, TarotSpread.sort_order < current_order)\
+            .order_by(TarotSpread.sort_order.desc())\
+            .first()
+    else:
+        target = db.query(TarotSpread)\
+            .filter(TarotSpread.category_id == category_id, TarotSpread.sort_order > current_order)\
+            .order_by(TarotSpread.sort_order.asc())\
+            .first()
+            
+    if target:
+        spread.sort_order, target.sort_order = target.sort_order, spread.sort_order
+        db.commit()
+        return SuccessResponse(message=f"Moved spread {direction}")
+    else:
+        return SuccessResponse(message="Already at the edge", success=False)

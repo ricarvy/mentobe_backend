@@ -7,7 +7,7 @@ from app.models import (
     InterpretationRecord, UserResponse,
     FollowupRequest, FollowupResponse,
     ShareInterpretationData, SharerInfo,
-    TarotCategoryResponse
+    TarotCategoryResponse, TarotCategoryWithSpreadsResponse, TarotSpreadResponse
 )
 from app.dependencies import get_current_user
 # from app.database import supabase # Removed
@@ -191,16 +191,32 @@ def get_tarot_categories(lang: str = "cn", db: Session = Depends(get_db)):
             name = cat.name_jp or cat.name
             description = cat.description_jp or cat.description
             
-        # Create a response object with localized fields as 'name' and 'description'
-        # But TarotCategoryResponse has fixed fields.
-        # Ideally, we should just return the full object and let frontend choose?
-        # OR we modify the response to just have 'name' and 'description' filled with correct language.
-        # Let's override the fields in the response.
-        
-        cat_resp = TarotCategoryResponse.from_orm(cat)
+        cat_resp = TarotCategoryWithSpreadsResponse.from_orm(cat)
         cat_resp.name = name
         cat_resp.description = description
         
+        # Process spreads
+        spreads_list = []
+        # Sort spreads by sort_order
+        sorted_spreads = sorted(cat.spreads, key=lambda s: s.sort_order)
+        
+        for spread in sorted_spreads:
+            s_name = spread.name
+            s_desc = spread.description
+            
+            if lang == "en":
+                s_name = spread.name_en or spread.name
+                s_desc = spread.description_en or spread.description
+            elif lang == "jp":
+                s_name = spread.name_jp or spread.name
+                s_desc = spread.description_jp or spread.description
+                
+            spread_resp = TarotSpreadResponse.from_orm(spread)
+            spread_resp.name = s_name
+            spread_resp.description = s_desc
+            spreads_list.append(spread_resp)
+            
+        cat_resp.spreads = spreads_list
         result.append(cat_resp)
         
     return SuccessResponse(data=result)
