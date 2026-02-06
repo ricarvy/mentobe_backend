@@ -1,5 +1,6 @@
 import httpx
 import logging
+import stripe
 from app.config import settings
 from typing import Optional, Dict, Any
 
@@ -77,3 +78,52 @@ async def fetch_price_details(pid: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Error fetching price {pid}: {e}")
     
     return {"id": pid, "amount": 0, "currency": "unknown", "error": "fetch_failed", "status": "error"}
+
+async def refund_payment(session_id: str, payment_intent_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Refund a payment by Stripe Session ID or Payment Intent ID.
+    1. If payment_intent_id provided, use it.
+    2. Else Retrieve Session to get Payment Intent
+    3. Create Refund
+    """
+    if not settings.STRIPE_SECRET_KEY:
+        return {"success": False, "message": "Stripe config missing"}
+        
+    try:
+        # 1. Resolve Payment Intent
+        if not payment_intent_id:
+            session = stripe.checkout.Session.retrieve(
+                session_id, 
+                api_key=settings.STRIPE_SECRET_KEY
+            )
+            payment_intent_id = session.get("payment_intent")
+            
+            if not payment_intent_id:
+                # Check if it's a subscription
+                if session.get("mode") == "subscription":
+                    # For subscriptions, we might need to refund the latest invoice
+                    invoice_id = session.get("invoice")
+                    if invoice_id:
+                        invoice = stripe.Invoice.retrieve(invoice_id, api_key=settings.STRIPE_SECRET_KEY)
+                        payment_intent_id = invoice.get("payment_intent")
+                        logger.info(f"Retrieved Invoice {invoice_id}, Payment Intent: {payment_intent_id}")
+            
+        if not payment_intent_id:
+            logger.warning(f"Payment Intent not found for session {session_id}")
+            return {"success": False, "message": "Payment Intent not found (Invoice might be manually paid or $0)"}
+
+        # 2. Create Refund
+        logger.info(f"Initiating refund for Payment Intent: {payment_intent_id}")
+        refund = stripe.Refund.create(
+            payment_intent=payment_intent_id,
+            api_key=settings.STRIPE_SECRET_KEY
+        )
+        
+        return {"success": True, "refund_id": refund.id, "status": refund.status}
+        
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe Refund Error: {e}")
+        return {"success": False, "message": str(e)}
+    except Exception as e:
+        logger.error(f"Refund Error: {e}")
+        return {"success": False, "message": str(e)}

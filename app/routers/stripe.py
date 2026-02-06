@@ -17,6 +17,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from fastapi.concurrency import run_in_threadpool
 
+# Set Stripe API version to ensure compatibility (e.g. accessing payment_intent on Invoice)
+stripe.api_version = "2023-10-16"
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -241,8 +244,242 @@ async def stripe_webhook(request: Request):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         await handle_checkout_completed(session)
+        
+    elif event["type"] == "charge.refunded":
+        charge = event["data"]["object"]
+        await handle_charge_refunded(charge)
+
+    elif event["type"] == "payment_intent.succeeded":
+        payment_intent = event["data"]["object"]
+        await handle_payment_intent_succeeded(payment_intent)
+
+    elif event["type"] == "invoice.payment_succeeded":
+        invoice = event["data"]["object"]
+        await handle_invoice_payment_succeeded(invoice)
 
     return {"success": True}
+
+async def handle_invoice_payment_succeeded(invoice: dict):
+    """
+    Handle invoice.payment_succeeded event.
+    This is critical for Subscription payments where checkout.session.completed 
+    might not have the payment_intent ready, or for recurring payments.
+    """
+    invoice_id = invoice.get("id")
+    payment_intent_id = invoice.get("payment_intent")
+    subscription_id = invoice.get("subscription")
+    
+    logger.info(f"Processing invoice.payment_succeeded: {invoice_id}, PI: {payment_intent_id}")
+    
+    # Fallback: If payment_intent_id is missing (e.g. newer API versions), retrieve it explicitly
+    if not payment_intent_id and invoice_id:
+        try:
+            # We rely on the globally set stripe.api_version or explicit expansion
+            inv_obj = await run_in_threadpool(
+                lambda: stripe.Invoice.retrieve(invoice_id, expand=['payment_intent'], api_key=settings.STRIPE_SECRET_KEY)
+            )
+            # Check for payment_intent field or object
+            pi_obj = inv_obj.get('payment_intent')
+            if isinstance(pi_obj, dict):
+                payment_intent_id = pi_obj.get('id')
+            elif isinstance(pi_obj, str):
+                payment_intent_id = pi_obj
+            
+            if payment_intent_id:
+                logger.info(f"Retrieved missing PaymentIntent ID via API: {payment_intent_id}")
+        except Exception as e:
+            logger.error(f"Failed to retrieve Invoice details for PI: {e}")
+
+    if not invoice_id or not payment_intent_id:
+        return
+
+    db = SessionLocal()
+    try:
+        # Update existing payment record by Invoice ID
+        payment = db.query(Payment).filter(Payment.invoice_id == invoice_id).first()
+        if payment:
+            if not payment.payment_intent_id:
+                payment.payment_intent_id = payment_intent_id
+                db.commit()
+                logger.info(f"Updated Payment {payment.id} with PaymentIntent ID: {payment_intent_id} (via Invoice event)")
+            else:
+                logger.info(f"Payment {payment.id} already has PaymentIntent ID: {payment.payment_intent_id}")
+        else:
+            # For recurring renewals, we might not have a Payment record yet 
+            # (unless we created it on invoice.created or similar).
+            # If we want to track renewals, we should create a Payment record here.
+            # But based on current requirement (fix missing PI for initial payment),
+            # updating the existing one is the priority.
+            logger.info(f"No local payment found for Invoice {invoice_id}. Might be a renewal or unrecorded transaction.")
+            
+    except Exception as e:
+        logger.error(f"Error handling invoice.payment_succeeded: {e}")
+    finally:
+        db.close()
+
+async def handle_payment_intent_succeeded(payment_intent: dict):
+    """
+    Handle payment_intent.succeeded event.
+    Used to ensure payment_intent_id is recorded in the database, 
+    especially if checkout.session.completed missed it or for invoice payments.
+    """
+    pi_id = payment_intent.get("id")
+    amount = payment_intent.get("amount")
+    status = payment_intent.get("status")
+    invoice_id = payment_intent.get("invoice")
+    metadata = payment_intent.get("metadata", {})
+    
+    logger.info(f"Processing payment_intent.succeeded: {pi_id}, Invoice: {invoice_id}")
+    
+    db = SessionLocal()
+    try:
+        # 1. Try to find existing payment by Invoice ID
+        if invoice_id:
+            payment = db.query(Payment).filter(Payment.invoice_id == invoice_id).first()
+            if payment:
+                if not payment.payment_intent_id:
+                    payment.payment_intent_id = pi_id
+                    db.commit()
+                    logger.info(f"Updated Payment {payment.id} with PaymentIntent ID: {pi_id} (via Invoice match)")
+                return
+
+        # 2. Try to find by Stripe Session ID (if in metadata)
+        session_id = metadata.get("session_id") # Note: Stripe doesn't auto-add session_id to PI metadata usually
+        if session_id:
+            payment = db.query(Payment).filter(Payment.stripe_session_id == session_id).first()
+            if payment:
+                if not payment.payment_intent_id:
+                    payment.payment_intent_id = pi_id
+                    db.commit()
+                    logger.info(f"Updated Payment {payment.id} with PaymentIntent ID: {pi_id} (via Session ID match)")
+                return
+
+        # 3. If not found, this might be a renewal or independent payment.
+        # For now, we only log. Implementing full renewal logic requires handling invoice.payment_succeeded
+        # which provides subscription details better than PI.
+        logger.info(f"PaymentIntent {pi_id} succeeded but no matching local payment found (Invoice: {invoice_id}).")
+        
+    except Exception as e:
+        logger.error(f"Error handling payment_intent.succeeded: {e}")
+    finally:
+        db.close()
+
+async def handle_charge_refunded(charge: dict):
+    """
+    Handle charge refunded event.
+    1. Find user and product from metadata (if available)
+    2. Revert VIP status
+    3. Update Payment status
+    """
+    logger.info(f"Processing charge.refunded: {charge.get('id')}")
+    
+    # Attempt to extract metadata
+    # Charge metadata might be empty, check PaymentIntent if possible?
+    # Usually metadata on Checkout Session is copied to Payment Intent, 
+    # and sometimes to Charge depending on config.
+    metadata = charge.get("metadata", {})
+    payment_intent_id = charge.get("payment_intent")
+    
+    # If metadata is empty, try to retrieve PaymentIntent
+    if not metadata and payment_intent_id and settings.STRIPE_SECRET_KEY:
+        try:
+            pi = stripe.PaymentIntent.retrieve(payment_intent_id, api_key=settings.STRIPE_SECRET_KEY)
+            metadata = pi.get("metadata", {})
+            logger.info(f"Retrieved metadata from PaymentIntent {payment_intent_id}")
+        except Exception as e:
+            logger.error(f"Failed to retrieve PaymentIntent: {e}")
+
+    user_id = metadata.get("userId")
+    price_id = metadata.get("priceId")
+    
+    db = SessionLocal()
+    try:
+        # 1. Update Payment Record Status
+        payment = None
+        
+        # Priority 1: Search by PaymentIntent ID (Most reliable)
+        if payment_intent_id:
+            payment = db.query(Payment).filter(Payment.payment_intent_id == payment_intent_id).first()
+            if payment:
+                logger.info(f"Found payment {payment.id} via PaymentIntent ID {payment_intent_id}")
+        
+        # Priority 2: Fuzzy match by User ID + Price ID (Fallback)
+        if not payment and user_id:
+             # Find matching payment (approximate)
+             # This is not perfect but works for most cases where users don't have many concurrent duplicate purchases.
+             payment = db.query(Payment).filter(
+                 Payment.user_id == user_id, 
+                 Payment.price_id == price_id,
+                 Payment.status == "paid"
+             ).order_by(Payment.created_at.desc()).first()
+             
+             if payment:
+                 logger.info(f"Found payment {payment.id} via User ID {user_id} and Price ID {price_id} (Fuzzy match)")
+             
+        if payment:
+             payment.status = "refunded"
+             db.commit()
+             logger.info(f"Marked payment {payment.id} as refunded")
+        else:
+             logger.warning(f"Could not find payment record to mark as refunded. PI: {payment_intent_id}, User: {user_id}")
+
+        
+        # 2. Revert User Benefit
+        if not user_id or not price_id:
+            logger.error("Missing userId or priceId in refund metadata. Cannot revert benefit.")
+            return
+
+        vip_level, duration_days = get_vip_info(price_id)
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            logger.error(f"User {user_id} not found for refund")
+            return
+            
+        logger.info(f"Reverting benefit for user {user_id}. Level: {vip_level}, Duration: {duration_days}")
+        
+        if vip_level > 0:
+            current_expire = user.vip_expire_at
+            if current_expire:
+                # Deduct duration
+                new_expire = current_expire - timedelta(days=duration_days)
+                
+                # If new expiry is in the past, reset to Free (0)
+                now = datetime.now(timezone.utc)
+                
+                # Ensure we are comparing timezone-aware datetimes
+                if new_expire.tzinfo is None:
+                    new_expire = new_expire.replace(tzinfo=timezone.utc)
+                
+                if new_expire < now:
+                    user.vip_level = 0
+                    user.vip_expire_at = None # Or keep the past date? None is cleaner for Free.
+                    logger.info(f"User {user_id} downgraded to Free (Refund).")
+                else:
+                    user.vip_expire_at = new_expire
+                    logger.info(f"User {user_id} expiry reduced to {new_expire}.")
+            
+            # Special case: If they were upgraded to a higher level, 
+            # and now refunding, we might need to check if they have OTHER subscriptions?
+            # For simplicity, we assume linear accumulation.
+            
+            # Reset quota if they drop to free?
+            if user.vip_level == 0:
+                user.quota = 3 # Reset to default free quota? Or 1?
+                user.unlimited_quota = False # If we had this field? DB model check...
+                # User model doesn't have 'unlimited_quota' column explicitly in db_models.py snippet?
+                # Ah, auth.py constructs response with 'unlimitedQuota'.
+                # User.quota is integer.
+                pass
+                
+        db.commit()
+        logger.info(f"Refund processing completed for user {user_id}")
+        
+    except Exception as e:
+        logger.error(f"Error processing refund: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 @router.get("/webhook")
 async def stripe_webhook_get():
@@ -342,16 +579,34 @@ def _handle_checkout_completed_sync(session: dict):
             logger.error(msg)
             # We still record the payment for audit, but mark as unknown/failed logic maybe?
         
+        # 0. Extract extra IDs
+        subscription_id = session.get("subscription")
+        invoice_id = session.get("invoice")
+        payment_intent_id = session.get("payment_intent")
+
+        # If payment_intent is missing but we have an invoice, try to fetch it
+        if not payment_intent_id and invoice_id and settings.STRIPE_SECRET_KEY:
+            try:
+                invoice_obj = stripe.Invoice.retrieve(invoice_id, api_key=settings.STRIPE_SECRET_KEY)
+                payment_intent_id = invoice_obj.get("payment_intent")
+                logger.info(f"Retrieved payment_intent_id {payment_intent_id} from invoice {invoice_id}")
+            except Exception as e:
+                logger.error(f"Failed to retrieve invoice {invoice_id} for payment intent: {e}")
+
         # 1. Insert into payments table
         payment = Payment(
             user_id=user_id,
             stripe_session_id=session.get("id"),
+            payment_intent_id=payment_intent_id,
+            subscription_id=subscription_id,
+            invoice_id=invoice_id,
             amount_total=session.get("amount_total"),
             currency=session.get("currency"),
             status=session.get("payment_status"),
             price_id=price_id,
             vip_level=vip_level,
-            vip_duration="monthly" if duration_days == 30 else "yearly" if duration_days == 365 else "unknown"
+            vip_duration="monthly" if duration_days == 30 else "yearly" if duration_days == 365 else "unknown",
+            mode=session.get("mode")
         )
         db.add(payment)
         

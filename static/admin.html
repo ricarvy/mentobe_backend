@@ -175,10 +175,15 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>User ID</th>
+                    <th>User</th>
                     <th>Amount</th>
+                    <th>Currency</th>
                     <th>Status</th>
-                    <th>Date</th>
+                    <th>VIP Level</th>
+                    <th>Stripe Info</th>
+                    <th>Mode</th>
+                    <th>Created At</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -417,22 +422,62 @@
 
     // --- Payments ---
     async function loadPayments() {
-        const res = await apiCall('/api/admin/payments');
+        const res = await apiCall('/api/admin/payments?limit=50');
         if (!res || !res.success) return;
         
         const tbody = document.querySelector('#payments-table tbody');
         tbody.innerHTML = '';
         res.data.forEach(p => {
+            const amount = (p.amount_total / 100).toFixed(2);
+            
+            let statusColor = 'black';
+            if (p.status === 'paid' || p.status === 'complete') statusColor = 'green';
+            if (p.status === 'refunded') statusColor = 'red';
+
+            let actionHtml = '';
+            if (p.status === 'paid' || p.status === 'complete') {
+                actionHtml = `<button class="action-btn btn-red" onclick="refundPayment('${p.id}')">Refund</button>`;
+            } else if (p.status === 'refunded') {
+                actionHtml = `<span style="color:gray; font-size:12px;">Refunded</span>`;
+            }
+
             tbody.innerHTML += `
                 <tr>
                     <td>${p.id}</td>
-                    <td>${p.user_id ? p.user_id.substring(0,8) + '...' : 'N/A'}</td>
-                    <td>${(p.amount_total / 100).toFixed(2)}</td>
-                    <td>${p.status}</td>
+                    <td>
+                        <div>${p.user_email || 'Unknown'}</div>
+                        <div style="font-size:11px; color:#666;">${p.user_id ? p.user_id : 'N/A'}</div>
+                    </td>
+                    <td>${amount}</td>
+                    <td>${(p.currency || '').toUpperCase()}</td>
+                    <td><span style="color:${statusColor}; font-weight:bold;">${p.status}</span></td>
+                    <td>${p.vip_level || '-'}</td>
+                    <td style="font-size: 10px; font-family: monospace;">
+                        <div title="Subscription">S: ${p.subscription_id || '-'}</div>
+                        <div title="Invoice">I: ${p.invoice_id || '-'}</div>
+                        <div title="Payment Intent">P: ${p.payment_intent_id || '-'}</div>
+                    </td>
+                    <td>${p.mode || '-'}</td>
                     <td>${new Date(p.created_at).toLocaleString()}</td>
+                    <td>${actionHtml}</td>
                 </tr>
             `;
         });
+    }
+
+    async function refundPayment(paymentId) {
+        if (!confirm('Are you sure you want to refund this payment? This will revert the user\'s VIP benefits immediately.')) {
+            return;
+        }
+        
+        const res = await apiCall(`/api/admin/payments/${paymentId}/refund`, 'POST');
+        
+        if (res && res.success) {
+            alert('Refund initiated successfully!');
+            loadPayments();
+        } else {
+            alert('Refund failed: ' + (res?.error?.message || 'Unknown error'));
+        }
     }
 
     // --- Interpretations ---

@@ -39,12 +39,16 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(String(36), ForeignKey("users.id"))
     stripe_session_id = Column(String(255), nullable=True)
+    payment_intent_id = Column(String(255), nullable=True)
+    subscription_id = Column(String(255), nullable=True)
+    invoice_id = Column(String(255), nullable=True)
     amount_total = Column(Integer, nullable=True)
     currency = Column(String(10), nullable=True)
     status = Column(String(50), nullable=True)
     price_id = Column(String(255), nullable=True)
     vip_level = Column(Integer, nullable=True)
     vip_duration = Column(String(50), nullable=True)
+    mode = Column(String(20), nullable=True) # subscription or payment
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="payments")

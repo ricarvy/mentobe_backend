@@ -204,6 +204,8 @@ def delete_user(user_id: str, db: Session = Depends(get_db), admin: AdminUser = 
     db.commit()
     return SuccessResponse(data={"message": "User deleted"})
 
+from app.services.stripe_service import refund_payment
+
 # 2. Payments Management
 
 @router.get("/payments", response_model=SuccessResponse)
@@ -211,14 +213,58 @@ def list_payments(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     payments = db.query(Payment).order_by(Payment.created_at.desc()).offset(skip).limit(limit).all()
     data = []
     for p in payments:
+        # Get user email
+        user_email = "Unknown"
+        if p.user:
+            user_email = p.user.email
+
         data.append({
             "id": p.id,
             "user_id": p.user_id,
+            "user_email": user_email,
             "amount_total": p.amount_total,
+            "currency": p.currency,
             "status": p.status,
-            "created_at": p.created_at
+            "vip_level": p.vip_level,
+            "created_at": p.created_at,
+            "subscription_id": p.subscription_id,
+            "invoice_id": p.invoice_id,
+            "payment_intent_id": p.payment_intent_id,
+            "stripe_session_id": p.stripe_session_id,
+            "mode": p.mode
         })
     return SuccessResponse(data=data)
+
+@router.post("/payments/{id}/refund", response_model=SuccessResponse)
+async def refund_user_payment(id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    payment = db.query(Payment).filter(Payment.id == id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    if payment.status == "refunded":
+        raise HTTPException(status_code=400, detail="Payment already refunded")
+        
+    if not payment.stripe_session_id and not payment.payment_intent_id:
+        raise HTTPException(status_code=400, detail="No Stripe Session ID or Payment Intent ID for this payment")
+        
+    # Call Stripe Refund
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Pass payment_intent_id if available, otherwise session_id will be used to look it up
+        result = await refund_payment(payment.stripe_session_id, payment.payment_intent_id)
+        logger.info(f"Refund result for payment {id}: {result}")
+        
+        if not result.get("success"):
+            error_msg = result.get("message")
+            logger.error(f"Refund failed for payment {id}: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+            
+        return SuccessResponse(message="Refund initiated successfully")
+    except Exception as e:
+        logger.error(f"Unexpected error during refund for payment {id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 3. Interpretations Management
 
