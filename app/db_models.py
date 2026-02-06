@@ -87,7 +87,11 @@ class TarotSpreadCategory(Base):
     id = Column(Integer, primary_key=True, index=True)
     slug = Column(String(50), unique=True, index=True, nullable=False) # e.g. 'love'
     name = Column(String(100), nullable=False) # e.g. '爱情'
+    name_en = Column(String(100), nullable=True)
+    name_jp = Column(String(100), nullable=True)
     description = Column(String(255), nullable=True)
+    description_en = Column(String(255), nullable=True)
+    description_jp = Column(String(255), nullable=True)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

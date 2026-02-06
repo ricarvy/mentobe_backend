@@ -256,7 +256,11 @@ def create_category(category: TarotCategoryCreate, db: Session = Depends(get_db)
     new_category = TarotSpreadCategory(
         slug=category.slug,
         name=category.name,
+        name_en=category.name_en,
+        name_jp=category.name_jp,
         description=category.description,
+        description_en=category.description_en,
+        description_jp=category.description_jp,
         sort_order=category.sort_order
     )
     db.add(new_category)
@@ -284,14 +288,60 @@ def update_category(id: int, category: TarotCategoryUpdate, db: Session = Depend
     
     if category.name is not None:
         db_category.name = category.name
+    if category.name_en is not None:
+        db_category.name_en = category.name_en
+    if category.name_jp is not None:
+        db_category.name_jp = category.name_jp
     if category.description is not None:
         db_category.description = category.description
+    if category.description_en is not None:
+        db_category.description_en = category.description_en
+    if category.description_jp is not None:
+        db_category.description_jp = category.description_jp
     if category.sort_order is not None:
         db_category.sort_order = category.sort_order
     
     db.commit()
     db.refresh(db_category)
     return SuccessResponse(data=TarotCategoryResponse.from_orm(db_category))
+
+@router.post("/categories/{id}/move", response_model=SuccessResponse)
+def move_category(id: int, direction: str, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    """
+    Move category up or down in sort order.
+    direction: 'up' or 'down'
+    """
+    if direction not in ['up', 'down']:
+        raise HTTPException(status_code=400, detail="Invalid direction. Use 'up' or 'down'")
+
+    category = db.query(TarotSpreadCategory).filter(TarotSpreadCategory.id == id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    current_order = category.sort_order
+    
+    if direction == 'up':
+        # Find the one immediately above (smaller sort_order)
+        # We want the largest sort_order that is less than current_order
+        target = db.query(TarotSpreadCategory)\
+            .filter(TarotSpreadCategory.sort_order < current_order)\
+            .order_by(TarotSpreadCategory.sort_order.desc())\
+            .first()
+    else: # down
+        # Find the one immediately below (larger sort_order)
+        # We want the smallest sort_order that is greater than current_order
+        target = db.query(TarotSpreadCategory)\
+            .filter(TarotSpreadCategory.sort_order > current_order)\
+            .order_by(TarotSpreadCategory.sort_order.asc())\
+            .first()
+            
+    if target:
+        # Swap sort_order
+        category.sort_order, target.sort_order = target.sort_order, category.sort_order
+        db.commit()
+        return SuccessResponse(message=f"Moved category {direction}")
+    else:
+        return SuccessResponse(message="Already at the edge", success=False)
 
 @router.delete("/categories/{id}", response_model=SuccessResponse)
 def delete_category(id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):

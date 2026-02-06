@@ -73,7 +73,11 @@ class Spread(BaseModel):
 class TarotCategoryBase(BaseModel):
     slug: str
     name: str
+    name_en: Optional[str] = None
+    name_jp: Optional[str] = None
     description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_jp: Optional[str] = None
     sort_order: Optional[int] = 0
 
 class TarotCategoryCreate(TarotCategoryBase):
@@ -82,7 +86,11 @@ class TarotCategoryCreate(TarotCategoryBase):
 class TarotCategoryUpdate(BaseModel):
     slug: Optional[str] = None
     name: Optional[str] = None
+    name_en: Optional[str] = None
+    name_jp: Optional[str] = None
     description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_jp: Optional[str] = None
     sort_order: Optional[int] = None
 
 class TarotCategoryResponse(TarotCategoryBase):

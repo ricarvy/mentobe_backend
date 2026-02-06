@@ -6,13 +6,14 @@ from app.models import (
     HistoryResponse, SuccessResponse, ErrorResponse,
     InterpretationRecord, UserResponse,
     FollowupRequest, FollowupResponse,
-    ShareInterpretationData, SharerInfo
+    ShareInterpretationData, SharerInfo,
+    TarotCategoryResponse
 )
 from app.dependencies import get_current_user
 # from app.database import supabase # Removed
 from app.database import SessionLocal, get_db
 from sqlalchemy.orm import Session
-from app.db_models import TarotInterpretation, User
+from app.db_models import TarotInterpretation, User, TarotSpreadCategory
 from app.config import settings
 from app.services.llm import stream_tarot_interpretation
 from app.services.quota import QuotaService
@@ -167,6 +168,42 @@ async def generate_interpretation_stream(user_id: str, request: InterpretRequest
         if full_text:
             logger.info(f"Stream finished/interrupted. Saving interpretation for user {user_id} (len={len(full_text)})...")
             await save_interpretation(user_id, request, full_text)
+
+@router.get("/categories", response_model=SuccessResponse)
+def get_tarot_categories(lang: str = "cn", db: Session = Depends(get_db)):
+    """
+    Get all tarot spread categories with i18n support.
+    lang: 'cn', 'en', 'jp'
+    """
+    categories = db.query(TarotSpreadCategory).order_by(TarotSpreadCategory.sort_order.asc()).all()
+    
+    result = []
+    for cat in categories:
+        # Clone or create response object
+        # We need to map fields based on lang
+        name = cat.name
+        description = cat.description
+        
+        if lang == "en":
+            name = cat.name_en or cat.name
+            description = cat.description_en or cat.description
+        elif lang == "jp":
+            name = cat.name_jp or cat.name
+            description = cat.description_jp or cat.description
+            
+        # Create a response object with localized fields as 'name' and 'description'
+        # But TarotCategoryResponse has fixed fields.
+        # Ideally, we should just return the full object and let frontend choose?
+        # OR we modify the response to just have 'name' and 'description' filled with correct language.
+        # Let's override the fields in the response.
+        
+        cat_resp = TarotCategoryResponse.from_orm(cat)
+        cat_resp.name = name
+        cat_resp.description = description
+        
+        result.append(cat_resp)
+        
+    return SuccessResponse(data=result)
 
 @router.post("/interpret")
 async def interpret(request: InterpretRequest, current_user: UserResponse = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -23,11 +23,13 @@ def ensure_admin():
                 role="admin"
             )
             db.add(new_admin)
-            db.commit()
             print("Admin user created.")
         else:
-            print(f"Admin user {username} already exists.")
-            # Verify password? No, just leave it.
+            print(f"Admin user {username} already exists. Updating password...")
+            admin.password = get_password_hash(password)
+            print(f"Admin user {username} password updated.")
+        
+        db.commit()
             
     except Exception as e:
         print(f"Error: {e}")
