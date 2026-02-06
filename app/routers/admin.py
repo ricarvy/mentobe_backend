@@ -3,10 +3,13 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.db_models import User, Payment, TarotInterpretation, AdminUser, SystemConfig
+from app.db_models import User, Payment, TarotInterpretation, AdminUser, SystemConfig, TarotSpreadCategory
 from app.dependencies import verify_password
 from app.config import settings
-from app.models import UserResponse, SuccessResponse, ErrorResponse, LoginRequest
+from app.models import (
+    UserResponse, SuccessResponse, ErrorResponse, LoginRequest,
+    TarotCategoryCreate, TarotCategoryUpdate, TarotCategoryResponse
+)
 from app.services.stripe_service import fetch_price_details
 from pydantic import BaseModel
 from datetime import datetime
@@ -241,3 +244,61 @@ def delete_interpretation(id: int, db: Session = Depends(get_db), admin: AdminUs
     db.delete(item)
     db.commit()
     return SuccessResponse(data={"message": "Interpretation deleted"})
+
+# 5. Tarot Category Management
+
+@router.post("/categories", response_model=SuccessResponse)
+def create_category(category: TarotCategoryCreate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    db_category = db.query(TarotSpreadCategory).filter(TarotSpreadCategory.slug == category.slug).first()
+    if db_category:
+        raise HTTPException(status_code=400, detail="Category with this slug already exists")
+    
+    new_category = TarotSpreadCategory(
+        slug=category.slug,
+        name=category.name,
+        description=category.description,
+        sort_order=category.sort_order
+    )
+    db.add(new_category)
+    db.commit()
+    db.refresh(new_category)
+    return SuccessResponse(data=TarotCategoryResponse.from_orm(new_category))
+
+@router.get("/categories", response_model=SuccessResponse)
+def list_categories(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    categories = db.query(TarotSpreadCategory).order_by(TarotSpreadCategory.sort_order.asc()).offset(skip).limit(limit).all()
+    return SuccessResponse(data=[TarotCategoryResponse.from_orm(c) for c in categories])
+
+@router.put("/categories/{id}", response_model=SuccessResponse)
+def update_category(id: int, category: TarotCategoryUpdate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    db_category = db.query(TarotSpreadCategory).filter(TarotSpreadCategory.id == id).first()
+    if not db_category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    if category.slug:
+        # Check uniqueness
+        existing = db.query(TarotSpreadCategory).filter(TarotSpreadCategory.slug == category.slug, TarotSpreadCategory.id != id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Slug already taken")
+        db_category.slug = category.slug
+    
+    if category.name is not None:
+        db_category.name = category.name
+    if category.description is not None:
+        db_category.description = category.description
+    if category.sort_order is not None:
+        db_category.sort_order = category.sort_order
+    
+    db.commit()
+    db.refresh(db_category)
+    return SuccessResponse(data=TarotCategoryResponse.from_orm(db_category))
+
+@router.delete("/categories/{id}", response_model=SuccessResponse)
+def delete_category(id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    db_category = db.query(TarotSpreadCategory).filter(TarotSpreadCategory.id == id).first()
+    if not db_category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    db.delete(db_category)
+    db.commit()
+    return SuccessResponse(message="Category deleted")

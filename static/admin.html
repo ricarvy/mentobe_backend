@@ -60,7 +60,32 @@
         <div class="tab active" onclick="switchTab('users')">Users</div>
         <div class="tab" onclick="switchTab('payments')">Payments</div>
         <div class="tab" onclick="switchTab('interpretations')">AI Interpretations</div>
+        <div class="tab" onclick="switchTab('categories')">Tarot Categories</div>
         <div class="tab" onclick="switchTab('configs')">Configuration</div>
+    </div>
+
+    <!-- Categories View -->
+    <div id="view-categories" class="hidden">
+        <div style="margin-bottom: 10px; display: flex; justify-content: space-between;">
+            <h2>Tarot Categories Management</h2>
+            <div>
+                <button class="action-btn btn-blue" onclick="openAddCategoryModal()">Add Category</button>
+                <button class="action-btn btn-blue" onclick="loadCategories()">Refresh</button>
+            </div>
+        </div>
+        <table id="categories-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Slug</th>
+                    <th>Name</th>
+                    <th>Sort Order</th>
+                    <th>Description</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
     </div>
 
     <!-- Users View -->
@@ -166,6 +191,22 @@
     </div>
 </div>
 
+<!-- Edit/Add Category Modal -->
+<div id="edit-category-modal" class="modal hidden">
+    <div class="modal-content">
+        <h3 id="category-modal-title">Edit Category</h3>
+        <input type="hidden" id="edit-category-id">
+        <label>Slug: <input type="text" id="edit-category-slug" placeholder="e.g. love" style="width:100%; margin-bottom:10px;"></label>
+        <label>Name: <input type="text" id="edit-category-name" placeholder="e.g. 爱情" style="width:100%; margin-bottom:10px;"></label>
+        <label>Description: <textarea id="edit-category-desc" style="width:100%; height:60px; margin-bottom:10px;" placeholder="Optional description"></textarea></label>
+        <label>Sort Order: <input type="number" id="edit-category-sort" value="0" style="width:100%; margin-bottom:10px;"></label>
+        <div style="text-align: right; margin-top: 10px;">
+            <button class="action-btn" onclick="closeCategoryModal()">Cancel</button>
+            <button class="action-btn btn-blue" onclick="saveCategory()">Save</button>
+        </div>
+    </div>
+</div>
+
 <script>
     let credentials = null;
 
@@ -206,7 +247,7 @@
     }
 
     function switchTab(tab) {
-        ['users', 'payments', 'interpretations', 'configs'].forEach(t => {
+        ['users', 'payments', 'interpretations', 'configs', 'categories'].forEach(t => {
             document.getElementById('view-' + t).classList.add('hidden');
         });
         document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
@@ -218,6 +259,7 @@
         if (tab === 'payments') loadPayments();
         if (tab === 'interpretations') loadInterpretations();
         if (tab === 'configs') loadConfigs();
+        if (tab === 'categories') loadCategories();
     }
 
     async function apiCall(url, method = 'GET', body = null) {
@@ -419,6 +461,89 @@
         // Or just let the user copy the default value.
         // I'll just remove the reset button logic for now to avoid confusion.
         alert("To reset, please copy the 'Default' value into the input box and click Save.");
+    }
+
+    // --- Categories ---
+    async function loadCategories() {
+        const res = await apiCall('/api/admin/categories');
+        if (!res || !res.success) return;
+        
+        const tbody = document.querySelector('#categories-table tbody');
+        tbody.innerHTML = '';
+        res.data.forEach(c => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${c.id}</td>
+                    <td>${c.slug}</td>
+                    <td>${c.name}</td>
+                    <td>${c.sort_order}</td>
+                    <td>${c.description || '-'}</td>
+                    <td>
+                        <button class="action-btn btn-blue" onclick="editCategory(${c.id}, '${c.slug}', '${c.name}', '${c.description || ''}', ${c.sort_order})">Edit</button>
+                        <button class="action-btn btn-red" onclick="deleteCategory(${c.id})">Del</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    function openAddCategoryModal() {
+        document.getElementById('category-modal-title').innerText = "Add Category";
+        document.getElementById('edit-category-id').value = "";
+        document.getElementById('edit-category-slug').value = "";
+        document.getElementById('edit-category-name').value = "";
+        document.getElementById('edit-category-desc').value = "";
+        document.getElementById('edit-category-sort').value = "0";
+        document.getElementById('edit-category-modal').classList.remove('hidden');
+    }
+
+    function editCategory(id, slug, name, desc, sort) {
+        document.getElementById('category-modal-title').innerText = "Edit Category";
+        document.getElementById('edit-category-id').value = id;
+        document.getElementById('edit-category-slug').value = slug;
+        document.getElementById('edit-category-name').value = name;
+        document.getElementById('edit-category-desc').value = desc;
+        document.getElementById('edit-category-sort').value = sort;
+        document.getElementById('edit-category-modal').classList.remove('hidden');
+    }
+
+    function closeCategoryModal() {
+        document.getElementById('edit-category-modal').classList.add('hidden');
+    }
+
+    async function saveCategory() {
+        const id = document.getElementById('edit-category-id').value;
+        const slug = document.getElementById('edit-category-slug').value;
+        const name = document.getElementById('edit-category-name').value;
+        const desc = document.getElementById('edit-category-desc').value;
+        const sort = parseInt(document.getElementById('edit-category-sort').value) || 0;
+
+        if (!slug || !name) {
+            alert("Slug and Name are required");
+            return;
+        }
+
+        let res;
+        if (id) {
+            // Update
+            res = await apiCall('/api/admin/categories/' + id, 'PUT', { slug, name, description: desc, sort_order: sort });
+        } else {
+            // Create
+            res = await apiCall('/api/admin/categories', 'POST', { slug, name, description: desc, sort_order: sort });
+        }
+
+        if (res && res.success) {
+            closeCategoryModal();
+            loadCategories();
+        } else {
+            alert(res?.error?.detail || "Failed to save");
+        }
+    }
+
+    async function deleteCategory(id) {
+        if (!confirm('Delete category?')) return;
+        const res = await apiCall('/api/admin/categories/' + id, 'DELETE');
+        if (res && res.success) loadCategories();
     }
 </script>
 

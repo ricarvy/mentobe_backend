@@ -70,6 +70,29 @@ class Spread(BaseModel):
     description: str
     positions: List[SpreadPosition]
 
+class TarotCategoryBase(BaseModel):
+    slug: str
+    name: str
+    description: Optional[str] = None
+    sort_order: Optional[int] = 0
+
+class TarotCategoryCreate(TarotCategoryBase):
+    pass
+
+class TarotCategoryUpdate(BaseModel):
+    slug: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+
+class TarotCategoryResponse(TarotCategoryBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
 class InterpretRequest(BaseModel):
     userId: str
     question: str

@@ -80,3 +80,14 @@ class SystemConfig(Base):
     value = Column(Text, nullable=True)
     description = Column(String(255), nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class TarotSpreadCategory(Base):
+    __tablename__ = "tarot_spread_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String(50), unique=True, index=True, nullable=False) # e.g. 'love'
+    name = Column(String(100), nullable=False) # e.g. '爱情'
+    description = Column(String(255), nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
