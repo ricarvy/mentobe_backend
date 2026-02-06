@@ -231,17 +231,25 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
     logger.info(f"Received interpret request from user {current_user.id}")
 
     # 0. Check VIP Spread Restrictions
-    # Free (0): <= 6 cards (Updated per request: <3 Free, 3-6 Free & Pro)
-    # Pro (1): <= 6 cards
+    # Free (0): < 3 cards (1-2 cards)
+    # Pro (1): <= 6 cards (1-6 cards)
     # Premium (2): Unlimited
+    
     card_count = len(request.cards)
     vip_level = current_user.vipLevel or 0
     
-    # If user is not Premium (vip_level < 2), limit to 6 cards
-    if vip_level < 2 and card_count > 6:
-        return ErrorResponse(success=False, error={
+    # Free user limit
+    if vip_level == 0 and card_count >= 3:
+         return ErrorResponse(success=False, error={
             "code": "VIP_LEVEL_TOO_LOW", 
-            "message": "This spread requires Premium membership (more than 6 cards)."
+            "message": "Free users are limited to spreads with less than 3 cards. Please upgrade to Pro."
+        })
+
+    # Pro user limit
+    if vip_level == 1 and card_count > 6:
+         return ErrorResponse(success=False, error={
+            "code": "VIP_LEVEL_TOO_LOW", 
+            "message": "Pro users are limited to spreads with 6 cards or less. Please upgrade to Premium."
         })
     
     # 1. Check Quota

@@ -20,18 +20,14 @@ def update_permissions():
             new_perm = old_perm
             
             # Logic:
-            # < 3 cards: Free
-            # 3-6 cards: Free and Pro -> Implies available to Free -> Permission 'Free'
-            # > 6 cards: Premium (implied)
+            # < 3 cards (1-2): Free
+            # 3-6 cards: Pro
+            # > 6 cards: Premium
             
             if count < 3:
                 new_perm = "Free"
             elif 3 <= count <= 6:
-                # User said "give to free and pro". 
-                # If we set to "Free", both Free and Pro can use it.
-                # If we set to "Pro", Free cannot use it (usually).
-                # So we set to "Free".
-                new_perm = "Free"
+                new_perm = "Pro"
             else:
                 new_perm = "Premium"
             
