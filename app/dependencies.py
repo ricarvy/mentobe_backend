@@ -24,10 +24,12 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def get_current_user(
+    db: Session = Depends(get_db),
     basic_creds: Optional[HTTPBasicCredentials] = Depends(security),
     token: Optional[str] = Depends(oauth2_scheme)
 ):
-    db = SessionLocal()
+    # db is injected via Depends(get_db), so it's the same session as the route handler
+    # and will be closed automatically by FastAPI
     try:
         # 1. Try Bearer Token (JWT)
         if token:
@@ -119,13 +121,10 @@ def get_current_user(
                     vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
                 )
             except Exception as e:
-                # If DB error or other issue
-                if isinstance(e, HTTPException):
-                    raise e
+                # Handle DB errors gracefully
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication failed",
-                    headers={"WWW-Authenticate": "Basic"},
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Internal server error during authentication"
                 )
 
         # 3. No auth provided
@@ -134,5 +133,10 @@ def get_current_user(
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    finally:
-        db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )

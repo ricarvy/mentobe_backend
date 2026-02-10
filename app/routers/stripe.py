@@ -35,14 +35,12 @@ def get_config_value(db: Session, key: str, default: str = None) -> str:
     return default
 
 @router.get("/config", response_model=SuccessResponse)
-async def get_stripe_config():
+async def get_stripe_config(db: Session = Depends(get_db)):
     """
     获取 Stripe 配置（包含价格详情）
     """
-    # Use a new DB session for config retrieval
-    db = SessionLocal()
-    try:
-        price_ids = {
+    # Use injected DB session
+    price_ids = {
             "pro_monthly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY),
             "pro_yearly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY),
             "premium_monthly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY", settings.NEXT_PUBLIC_STRIPE_PRICE_PREMIUM_MONTHLY),
@@ -50,8 +48,6 @@ async def get_stripe_config():
             "upgrade_monthly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY", getattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_MONTHLY", None)),
             "upgrade_yearly": get_config_value(db, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY", getattr(settings, "NEXT_PUBLIC_STRIPE_PRICE_UPGRADE_YEARLY", None)),
         }
-    finally:
-        db.close()
 
     # Fetch all prices in parallel
     tasks = []
@@ -72,7 +68,7 @@ async def get_stripe_config():
     return SuccessResponse(data={"prices": prices_map})
 
 @router.post("/create-checkout-session", response_model=SuccessResponse)
-async def create_checkout_session(request: CreateCheckoutSessionRequest):
+async def create_checkout_session(request: CreateCheckoutSessionRequest, db: Session = Depends(get_db)):
     """
     创建 Stripe Checkout Session
     """
@@ -82,13 +78,9 @@ async def create_checkout_session(request: CreateCheckoutSessionRequest):
     logger.info(f"[Stripe API] Creating checkout session for user: {request.user_id}")
     
     # Get dynamic price configs
-    db = SessionLocal()
-    try:
-        # We fetch these to potentially validate price IDs or use them for logic if needed
-        # But currently create_checkout_session mostly relies on the passed price_id
-        pass
-    finally:
-        db.close()
+    # We fetch these to potentially validate price IDs or use them for logic if needed
+    # But currently create_checkout_session mostly relies on the passed price_id
+    pass
 
     # Determine mode by inspecting price details from Stripe
     mode = "payment"
