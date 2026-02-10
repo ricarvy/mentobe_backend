@@ -5,7 +5,7 @@ from app.models import (
     CancelSubscriptionRequest, UserResponse
 )
 from app.config import settings
-from app.database import SessionLocal
+from app.database import SessionLocal, get_db
 from sqlalchemy.orm import Session
 from app.db_models import User, Payment, SystemConfig
 from app.dependencies import get_current_user
