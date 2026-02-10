@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBasic, HTTPBasicCredentials, OAuth2PasswordBearer
 # from app.database import supabase # Removed
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from sqlalchemy.orm import Session
 from app.db_models import User
 from app.models import UserResponse
@@ -25,18 +25,66 @@ def get_password_hash(password):
 
 def get_current_user(
     basic_creds: Optional[HTTPBasicCredentials] = Depends(security),
-    token: Optional[str] = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    token: Optional[str] = Depends(oauth2_scheme)
 ):
-    # 1. Try Bearer Token (JWT)
-    if token:
-        payload = decode_access_token(token)
-        if payload:
-            email = payload.get("sub")
-            if email:
-                # Check demo account via token (if we ever issue tokens for demo user)
-                if settings.DEMO_ACCOUNT_ENABLED and email == settings.DEMO_ACCOUNT_EMAIL:
-                     return UserResponse(
+    db = SessionLocal()
+    try:
+        # 1. Try Bearer Token (JWT)
+        if token:
+            payload = decode_access_token(token)
+            if payload:
+                email = payload.get("sub")
+                if email:
+                    # Check demo account via token (if we ever issue tokens for demo user)
+                    if settings.DEMO_ACCOUNT_ENABLED and email == settings.DEMO_ACCOUNT_EMAIL:
+                        return UserResponse(
+                            id="demo-user-id",
+                            username="Demo User",
+                            email=email,
+                            isActive=True,
+                            isDemo=True,
+                            unlimitedQuota=True
+                        )
+                    
+                    # Check DB
+                    user = db.query(User).filter(User.email == email).first()
+                    if user:
+                        # Check login_token consistency if user has one
+                        token_login_token = payload.get("login_token")
+                        if user.login_token and token_login_token != user.login_token:
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Session expired or invalid. Please login again.",
+                                headers={"WWW-Authenticate": "Bearer"},
+                            )
+
+                        return UserResponse(
+                            id=str(user.id),
+                            username=user.username,
+                            email=user.email,
+                            isActive=user.is_active,
+                            isDemo=False,
+                            unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
+                            vipLevel=user.vip_level,
+                            vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
+                        )
+            
+            # If token provided but invalid or user not found
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # 2. Try Basic Auth
+        if basic_creds:
+            email = basic_creds.username
+            password = basic_creds.password
+            
+            # Check for demo account
+            if settings.DEMO_ACCOUNT_ENABLED and email == settings.DEMO_ACCOUNT_EMAIL:
+                if password == settings.DEMO_ACCOUNT_PASSWORD:
+                    return UserResponse(
                         id="demo-user-id",
                         username="Demo User",
                         email=email,
@@ -44,94 +92,47 @@ def get_current_user(
                         isDemo=True,
                         unlimitedQuota=True
                     )
-                
-                # Check DB
+            
+            # Check database for regular user
+            try:
                 user = db.query(User).filter(User.email == email).first()
-                if user:
-                    # Check login_token consistency if user has one
-                    token_login_token = payload.get("login_token")
-                    if user.login_token and token_login_token != user.login_token:
-                         raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Session expired or invalid. Please login again.",
-                            headers={"WWW-Authenticate": "Bearer"},
-                        )
-
-                    return UserResponse(
-                        id=str(user.id),
-                        username=user.username,
-                        email=user.email,
-                        isActive=user.is_active,
-                        isDemo=False,
-                        unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
-                        vipLevel=user.vip_level,
-                        vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Incorrect email or password",
+                        headers={"WWW-Authenticate": "Basic"},
                     )
-        
-        # If token provided but invalid or user not found
+                if not verify_password(password, user.password):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Incorrect email or password",
+                        headers={"WWW-Authenticate": "Basic"},
+                    )
+                return UserResponse(
+                    id=str(user.id),
+                    username=user.username,
+                    email=user.email,
+                    isActive=user.is_active,
+                    isDemo=False,
+                    unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
+                    vipLevel=user.vip_level,
+                    vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
+                )
+            except Exception as e:
+                # If DB error or other issue
+                if isinstance(e, HTTPException):
+                    raise e
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication failed",
+                    headers={"WWW-Authenticate": "Basic"},
+                )
+
+        # 3. No auth provided
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token",
+            detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    # 2. Try Basic Auth
-    if basic_creds:
-        email = basic_creds.username
-        password = basic_creds.password
-        
-        # Check for demo account
-        if settings.DEMO_ACCOUNT_ENABLED and email == settings.DEMO_ACCOUNT_EMAIL:
-            if password == settings.DEMO_ACCOUNT_PASSWORD:
-                return UserResponse(
-                    id="demo-user-id",
-                    username="Demo User",
-                    email=email,
-                    isActive=True,
-                    isDemo=True,
-                    unlimitedQuota=True
-                )
-        
-        # Check database for regular user
-        try:
-            user = db.query(User).filter(User.email == email).first()
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid credentials",
-                    headers={"WWW-Authenticate": "Basic"},
-                )
-            
-            if not verify_password(password, user.password):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid credentials",
-                    headers={"WWW-Authenticate": "Basic"},
-                )
-                
-            return UserResponse(
-                id=str(user.id),
-                username=user.username,
-                email=user.email,
-                isActive=user.is_active,
-                isDemo=False,
-                unlimitedQuota=True if user.vip_level and user.vip_level > 0 else False,
-                vipLevel=user.vip_level,
-                vipExpireAt=user.vip_expire_at.isoformat() if user.vip_expire_at else None
-            )
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"Auth Error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication failed",
-                headers={"WWW-Authenticate": "Basic"},
-            )
-
-    # 3. No credentials provided
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Basic"},
-    )
+    finally:
+        db.close()

@@ -7,8 +7,13 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
 # Initialize SQLAlchemy
-engine = create_engine(settings.DATABASE_URL)
-print(settings.DATABASE_URL)
+engine = create_engine(
+    settings.DATABASE_URL,
+    pool_size=20,
+    max_overflow=20,
+    pool_pre_ping=True
+)
+# print(settings.DATABASE_URL) # Avoid logging sensitive info
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

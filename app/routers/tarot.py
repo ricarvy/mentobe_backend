@@ -222,7 +222,7 @@ def get_tarot_categories(lang: str = "cn", db: Session = Depends(get_db)):
     return SuccessResponse(data=result)
 
 @router.post("/interpret")
-async def interpret(request: InterpretRequest, current_user: UserResponse = Depends(get_current_user), db: Session = Depends(get_db)):
+async def interpret(request: InterpretRequest, current_user: UserResponse = Depends(get_current_user)):
     """
     塔罗牌解读接口
     1. 检查用户今日配额
@@ -254,10 +254,15 @@ async def interpret(request: InterpretRequest, current_user: UserResponse = Depe
     
     # 1. Check Quota
     if not current_user.unlimitedQuota:
-        quota_info = QuotaService.get_user_quota(current_user.id, db)
-        if quota_info.remaining <= 0:
-             logger.warning(f"User {current_user.id} exceeded daily quota")
-             return ErrorResponse(success=False, error={"code": "QUOTA_EXCEEDED", "message": "今日额度已用完"})
+        # Use a short-lived session for quota check to avoid holding connection during stream
+        db = SessionLocal()
+        try:
+            quota_info = QuotaService.get_user_quota(current_user.id, db)
+            if quota_info.remaining <= 0:
+                 logger.warning(f"User {current_user.id} exceeded daily quota")
+                 return ErrorResponse(success=False, error={"code": "QUOTA_EXCEEDED", "message": "今日额度已用完"})
+        finally:
+            db.close()
 
     # 2. Stream Response
     logger.info(f"Starting stream for user {current_user.id}")
