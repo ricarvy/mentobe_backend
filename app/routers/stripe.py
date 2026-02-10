@@ -1,13 +1,15 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from app.models import (
     SuccessResponse, ErrorResponse, 
-    CreateCheckoutSessionRequest, CheckoutSessionResponse
+    CreateCheckoutSessionRequest, CheckoutSessionResponse,
+    CancelSubscriptionRequest, UserResponse
 )
 from app.config import settings
 from app.database import SessionLocal
 from sqlalchemy.orm import Session
 from app.db_models import User, Payment, SystemConfig
-from app.services.stripe_service import fetch_price_details
+from app.dependencies import get_current_user
+from app.services.stripe_service import fetch_price_details, cancel_subscription
 import httpx
 import logging
 import json
@@ -206,6 +208,55 @@ async def check_payment_status(session_id: str):
     except Exception as e:
         logger.error(f"Error checking payment status: {e}")
         return {"status": "error", "message": str(e)}
+    finally:
+        db.close()
+
+@router.post("/cancel-subscription", response_model=SuccessResponse)
+async def cancel_user_subscription(
+    request: CancelSubscriptionRequest, 
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Cancel user's subscription.
+    If subscription_id is provided, cancel that specific one.
+    Otherwise, find the active subscription for the user.
+    """
+    db = SessionLocal()
+    try:
+        sub_id = request.subscription_id
+        
+        if not sub_id:
+            # Find active subscription for user
+            # We look for a payment record that is 'subscription' and has a subscription_id
+            # We prioritize the most recent one.
+            payment = db.query(Payment).filter(
+                Payment.user_id == current_user.id,
+                Payment.mode == "subscription",
+                Payment.subscription_id.isnot(None)
+            ).order_by(Payment.created_at.desc()).first()
+            
+            if not payment:
+                return ErrorResponse(success=False, error={"code": "NO_SUBSCRIPTION", "message": "No active subscription found"})
+            
+            sub_id = payment.subscription_id
+        else:
+            # Verify that the subscription belongs to the user
+            payment = db.query(Payment).filter(
+                Payment.user_id == current_user.id,
+                Payment.subscription_id == sub_id
+            ).first()
+            
+            if not payment:
+                return ErrorResponse(success=False, error={"code": "INVALID_SUBSCRIPTION", "message": "Subscription not found or access denied"})
+            
+        # Call service
+        result = await cancel_subscription(sub_id)
+        
+        if result.get("success"):
+            return SuccessResponse(data=result)
+        else:
+            return ErrorResponse(success=False, error={"code": "CANCEL_FAILED", "message": result.get("message")})
+            
     finally:
         db.close()
 

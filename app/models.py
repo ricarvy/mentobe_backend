@@ -109,8 +109,9 @@ class TarotSpreadBase(BaseModel):
     description: Optional[str] = None
     description_en: Optional[str] = None
     description_jp: Optional[str] = None
-    card_count: int = 1
-    permission: str = "Free" # Free, Pro, Premium
+    card_count: Optional[int] = 1
+    permission: Optional[str] = "Free"
+    positions: Optional[List[Dict[str, Any]]] = None # To accept list of dicts for update
     sort_order: Optional[int] = 0
 
 class TarotSpreadCreate(TarotSpreadBase):
@@ -126,10 +127,26 @@ class TarotSpreadUpdate(BaseModel):
     description_jp: Optional[str] = None
     card_count: Optional[int] = None
     permission: Optional[str] = None
+    positions: Optional[List[Dict[str, Any]]] = None
     sort_order: Optional[int] = None
+
+class TarotSpreadPositionResponse(BaseModel):
+    id: int
+    spread_id: int
+    position_index: int
+    name: str
+    name_en: Optional[str] = None
+    name_jp: Optional[str] = None
+    description: Optional[str] = None
+    description_en: Optional[str] = None
+    description_jp: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 class TarotSpreadResponse(TarotSpreadBase):
     id: int
+    positions: List[TarotSpreadPositionResponse] = []
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -139,75 +156,80 @@ class TarotSpreadResponse(TarotSpreadBase):
 class TarotCategoryWithSpreadsResponse(TarotCategoryResponse):
     spreads: List[TarotSpreadResponse] = []
 
-class InterpretRequest(BaseModel):
-    userId: str
-    question: str
-    spread: Spread
-    cards: List[TarotCard]
-    lang: str = "cn" # cn, en, jp
+    class Config:
+        from_attributes = True
 
-class InterpretationRecord(BaseModel):
-    id: str
-    userId: str
-    question: str
-    spreadType: str
-    cards: str # JSON string
-    interpretation: str
-    createdAt: datetime
+class InterpretRequest(BaseModel):
+    cards: List[TarotCard]
+    question: Optional[str] = None
+    spread: Optional[Spread] = None
+    lang: str = "cn"
+    stream: bool = True
 
 class SuggestRequest(BaseModel):
     question: str
-    cards: List[TarotCard]
     interpretation: str
-    lang: str = "cn" # cn, en, jp
+    lang: str = "cn"
 
 class SuggestResponse(BaseModel):
     suggestion: str
 
 class FollowupRequest(BaseModel):
-    question: str
-    spread: Spread
     cards: List[TarotCard]
+    question: str
     interpretation: str
-    followupCount: Optional[int] = None
-    lang: str = "cn" # cn, en, jp
+    spread: Optional[Spread] = None
+    count: int = 3
+    lang: str = "cn"
 
 class FollowupResponse(BaseModel):
     questions: List[str]
 
-class SharerInfo(BaseModel):
-    username: Optional[str] = "Anonymous"
-
-class ShareInterpretationData(BaseModel):
+class InterpretationRecord(BaseModel):
     id: str
-    question: Optional[str] = None
-    spreadType: Optional[str] = None
-    cards: str # JSON string
-    interpretation: Optional[str] = None
-    createdAt: datetime
-    sharerInfo: SharerInfo
+    userId: str
+    question: Optional[str]
+    spreadType: Optional[str]
+    cards: Optional[str]
+    interpretation: Optional[str]
+    createdAt: Optional[str]
+
+    class Config:
+        from_attributes = True
 
 class HistoryResponse(BaseModel):
     interpretations: List[InterpretationRecord]
 
-# Quota
+class SharerInfo(BaseModel):
+    username: str
+    avatar: Optional[str] = None
+
+class ShareInterpretationData(BaseModel):
+    id: str
+    question: str
+    spreadType: str
+    cards: str
+    interpretation: str
+    createdAt: datetime
+    sharerInfo: SharerInfo
+
+class CreateCheckoutSessionRequest(BaseModel):
+    price_id: str
+    success_url: str
+    cancel_url: str
+    user_id: str
+    user_email: str
+
+class CheckoutSessionResponse(BaseModel):
+    sessionId: str
+    url: str
+
+class CancelSubscriptionRequest(BaseModel):
+    subscription_id: Optional[str] = None
+    reason: Optional[str] = None
+
 class QuotaResponse(BaseModel):
     remaining: int
     used: int
-    total: Union[int, str]
+    total: Union[str, int]
     isDemo: bool
-
-# Stripe Models
-class CreateCheckoutSessionRequest(BaseModel):
-    price_id: str = Field(..., alias="priceId")
-    user_id: str = Field(..., alias="userId")
-    user_email: EmailStr = Field(..., alias="userEmail")
-    success_url: str = Field(..., alias="successUrl")
-    cancel_url: str = Field(..., alias="cancelUrl")
-
-    class Config:
-        populate_by_name = True
-
-class CheckoutSessionResponse(BaseModel):
-    session_id: str = Field(..., alias="sessionId")
-    url: str

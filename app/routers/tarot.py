@@ -322,7 +322,7 @@ async def followup(request: FollowupRequest):
 
     任务：
     {lang_instruction}
-    数量：{request.followupCount or settings.TAROT_FOLLOWUP_COUNT} 个
+    数量：{request.count or settings.TAROT_FOLLOWUP_COUNT} 个
     要求：每个问题都应具体、可执行，涵盖情感、行动、风险与时机等不同维度；避免泛泛而谈。
     输出：仅输出问题列表，每行一个问题，不要多余说明。
     """
@@ -370,7 +370,7 @@ async def followup(request: FollowupRequest):
     if not questions:
         questions = fallback_map.get(request.lang, fallback_map["cn"])
 
-    limit = request.followupCount or settings.TAROT_FOLLOWUP_COUNT
+    limit = request.count or settings.TAROT_FOLLOWUP_COUNT
     questions = questions[:limit]
 
     logger.info(f"Generated followup questions for user: {questions}")

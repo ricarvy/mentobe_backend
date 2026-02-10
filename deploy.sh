@@ -13,12 +13,9 @@ echo "Pulling latest code..."
 git pull origin master
 
 # 1. Build the Docker image
-# 使用当前目录下的 Dockerfile 构建镜像，并使用国内镜像源加速 pip install
+# 使用当前目录下的 Dockerfile 构建镜像
 echo "Building Docker image for $APP_NAME..."
-cp Dockerfile Dockerfile.cn
-sed -i 's|pip install --no-cache-dir -r requirements.txt|pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple|g' Dockerfile.cn
-docker build -t $APP_NAME -f Dockerfile.cn .
-rm Dockerfile.cn
+docker build -t $APP_NAME .
 
 # 2. Check for existing container and cleanup
 # 检查端口占用

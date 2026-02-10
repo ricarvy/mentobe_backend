@@ -127,3 +127,30 @@ async def refund_payment(session_id: str, payment_intent_id: Optional[str] = Non
     except Exception as e:
         logger.error(f"Refund Error: {e}")
         return {"success": False, "message": str(e)}
+
+async def cancel_subscription(subscription_id: str) -> Dict[str, Any]:
+    """
+    Cancel a subscription (at period end).
+    """
+    if not settings.STRIPE_SECRET_KEY:
+        return {"success": False, "message": "Stripe config missing"}
+        
+    try:
+        # Update subscription to cancel at period end
+        sub = stripe.Subscription.modify(
+            subscription_id,
+            cancel_at_period_end=True,
+            api_key=settings.STRIPE_SECRET_KEY
+        )
+        return {
+            "success": True, 
+            "status": sub.status, 
+            "cancel_at_period_end": sub.cancel_at_period_end,
+            "current_period_end": sub.current_period_end
+        }
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe Cancel Error: {e}")
+        return {"success": False, "message": str(e)}
+    except Exception as e:
+        logger.error(f"Cancel Error: {e}")
+        return {"success": False, "message": str(e)}
