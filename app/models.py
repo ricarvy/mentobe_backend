@@ -179,7 +179,7 @@ class FollowupRequest(BaseModel):
     question: str
     interpretation: str
     spread: Optional[Spread] = None
-    count: int = 3
+    count: Optional[int] = None
     lang: str = "cn"
 
 class FollowupResponse(BaseModel):
