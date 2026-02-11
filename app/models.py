@@ -214,11 +214,14 @@ class ShareInterpretationData(BaseModel):
     sharerInfo: SharerInfo
 
 class CreateCheckoutSessionRequest(BaseModel):
-    price_id: str
-    success_url: str
-    cancel_url: str
-    user_id: str
-    user_email: str
+    price_id: str = Field(..., alias="priceId")
+    success_url: str = Field(..., alias="successUrl")
+    cancel_url: str = Field(..., alias="cancelUrl")
+    user_id: str = Field(..., alias="userId")
+    user_email: str = Field(..., alias="userEmail")
+
+    class Config:
+        populate_by_name = True
 
 class CheckoutSessionResponse(BaseModel):
     sessionId: str

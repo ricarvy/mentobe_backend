@@ -1,0 +1,296 @@
+INFO:     Will watch for changes in these directories: ['/Users/mico/Documents/trae_projects/mentobe_backend']
+INFO:     Uvicorn running on http://0.0.0.0:8901 (Press CTRL+C to quit)
+INFO:     Started reloader process [58966] using StatReload
+2026-02-11 00:46:39,681 - root - INFO - Logging initialized. Writing to logs/2026-02-11_00-46-39.log
+INFO:     Started server process [59024]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:60539 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60540 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60539 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60540 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60539 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60539 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:47:36,568 - app.routers.tarot - INFO - Received interpret request from user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 00:47:36,568 - app.routers.tarot - INFO - Starting stream for user 855d6518-3a3d-4342-b1bd-925c63503e00
+INFO:     127.0.0.1:60628 - "POST /api/tarot/interpret?lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:47:36,569 - app.routers.tarot - INFO - Cards drawn for user 855d6518-3a3d-4342-b1bd-925c63503e00:
+1. 现状 (当前情况的象征)
+   牌面: 星币七 (正位)
+   含义: 耐心、投资、长期目标、等待
+2026-02-11 00:47:36,569 - app.routers.tarot - INFO - Calling LLM for user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 00:47:36,569 - app.services.llm - INFO - Calling LLM model: doubao-seed-1-6-flash-250828 via https://ark.cn-beijing.volces.com/api/v3
+2026-02-11 00:47:37,353 - httpx - INFO - HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/responses "HTTP/1.1 200 OK"
+2026-02-11 00:47:47,322 - app.routers.tarot - INFO - Stream finished/interrupted. Saving interpretation for user 855d6518-3a3d-4342-b1bd-925c63503e00 (len=795)...
+2026-02-11 00:47:47,324 - app.routers.tarot - INFO - Saving interpretation for user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 00:47:47,340 - app.services.quota - INFO - User 855d6518-3a3d-4342-b1bd-925c63503e00 is VIP. Skipping quota reduction.
+2026-02-11 00:47:47,340 - app.routers.tarot - INFO - Interpretation saved and quota updated for user 855d6518-3a3d-4342-b1bd-925c63503e00
+INFO:     127.0.0.1:60628 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:47:47,487 - app.services.llm - INFO - Calling LLM model: doubao-seed-1-6-flash-250828 via https://ark.cn-beijing.volces.com/api/v3
+2026-02-11 00:47:47,948 - httpx - INFO - HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/responses "HTTP/1.1 200 OK"
+2026-02-11 00:47:54,953 - app.routers.tarot - INFO - Generated followup questions for user: ['面对当前财运的“等待期”，我该如何调整心态，避免焦虑或懈怠？', '接下来我是否适合拓展副业或新的收入来源？如果适合，哪些方向更稳妥？', '当前已有投资项目中，哪些需要继续持有，哪些可能存在风险需要及时调整？', '星币七的“等待”结束后，何时是适合加大投入或调整财务策略的最佳时机？', '如果想通过提升技能增加财运，我需要优先学习哪些与财富增长相关的能力？', '如何平衡储蓄、日常支出和投资的比例，让现有资源在“等待期”发挥最大价值？']
+INFO:     127.0.0.1:60766 - "POST /api/tarot/followup?lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:48:06,386 - app.services.llm - INFO - Calling LLM model: doubao-seed-1-6-flash-250828 via https://ark.cn-beijing.volces.com/api/v3
+INFO:     127.0.0.1:61115 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61114 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61114 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61115 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:48:06,942 - httpx - INFO - HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/responses "HTTP/1.1 200 OK"
+2026-02-11 00:48:12,796 - app.routers.tarot - INFO - Generated followup questions for user: ['面对财运的“等待期”，我该如何调整焦虑的情绪？', '什么时候适合开始新的投资尝试？', '我需要如何调整现有资源的分配来提升财运？', '我现在持有的某个投资项目需要警惕吗？', '是否应该开发新的副业来增加财运来源？', '在当前财运状态下，如何培养健康的储蓄习惯？']
+INFO:     127.0.0.1:61116 - "POST /api/tarot/followup?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52888 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52889 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52888 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52889 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52888 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52888 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52888 - "GET /api/auth/quota?userId=00000000-0000-0000-0000-000000000000&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52889 - "GET /api/auth/quota?userId=00000000-0000-0000-0000-000000000000&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52888 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52888 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:59:23,906 - app.routers.tarot - INFO - Received interpret request from user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 00:59:23,907 - app.routers.tarot - INFO - Starting stream for user 855d6518-3a3d-4342-b1bd-925c63503e00
+INFO:     127.0.0.1:53048 - "POST /api/tarot/interpret?lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:59:23,921 - app.routers.tarot - INFO - Cards drawn for user 855d6518-3a3d-4342-b1bd-925c63503e00:
+1. 现状 (当前情况的象征)
+   牌面: 宝剑九 (逆位)
+   含义: 释放恐惧、积极思考、解决问题
+2026-02-11 00:59:23,923 - app.routers.tarot - INFO - Calling LLM for user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 00:59:23,924 - app.services.llm - INFO - Calling LLM model: doubao-seed-1-6-flash-250828 via https://ark.cn-beijing.volces.com/api/v3
+2026-02-11 00:59:24,595 - httpx - INFO - HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/responses "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:53076 - "GET /api/auth/quota?userId=00000000-0000-0000-0000-000000000000&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53077 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53076 - "GET /api/auth/quota?userId=00000000-0000-0000-0000-000000000000&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53076 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+2026-02-11 00:59:37,906 - app.routers.tarot - INFO - Stream finished/interrupted. Saving interpretation for user 855d6518-3a3d-4342-b1bd-925c63503e00 (len=830)...
+2026-02-11 00:59:37,910 - app.routers.tarot - INFO - Saving interpretation for user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 00:59:37,936 - app.services.quota - INFO - User 855d6518-3a3d-4342-b1bd-925c63503e00 is VIP. Skipping quota reduction.
+2026-02-11 00:59:37,936 - app.routers.tarot - INFO - Interpretation saved and quota updated for user 855d6518-3a3d-4342-b1bd-925c63503e00
+INFO:     127.0.0.1:53048 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53217 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53217 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53048 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53048 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53048 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+2026-02-11 01:00:15,657 - app.routers.tarot - INFO - Received interpret request from user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 01:00:15,658 - app.routers.tarot - INFO - Starting stream for user 855d6518-3a3d-4342-b1bd-925c63503e00
+INFO:     127.0.0.1:53755 - "POST /api/tarot/interpret?lang=cn HTTP/1.1" 200 OK
+2026-02-11 01:00:15,660 - app.routers.tarot - INFO - Cards drawn for user 855d6518-3a3d-4342-b1bd-925c63503e00:
+1. 现状 (当前情况的象征)
+   牌面: 宝剑国王 (逆位)
+   含义: 操纵、残酷、缺乏同情心、傲慢
+2026-02-11 01:00:15,661 - app.routers.tarot - INFO - Calling LLM for user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 01:00:15,661 - app.services.llm - INFO - Calling LLM model: doubao-seed-1-6-flash-250828 via https://ark.cn-beijing.volces.com/api/v3
+2026-02-11 01:00:16,367 - httpx - INFO - HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/responses "HTTP/1.1 200 OK"
+2026-02-11 01:00:30,699 - app.routers.tarot - INFO - Stream finished/interrupted. Saving interpretation for user 855d6518-3a3d-4342-b1bd-925c63503e00 (len=1052)...
+2026-02-11 01:00:30,700 - app.routers.tarot - INFO - Saving interpretation for user 855d6518-3a3d-4342-b1bd-925c63503e00
+2026-02-11 01:00:31,462 - app.services.quota - INFO - User 855d6518-3a3d-4342-b1bd-925c63503e00 is VIP. Skipping quota reduction.
+2026-02-11 01:00:31,470 - app.routers.tarot - INFO - Interpretation saved and quota updated for user 855d6518-3a3d-4342-b1bd-925c63503e00
+INFO:     127.0.0.1:53755 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+2026-02-11 01:00:31,682 - app.services.llm - INFO - Calling LLM model: doubao-seed-1-6-flash-250828 via https://ark.cn-beijing.volces.com/api/v3
+2026-02-11 01:00:32,271 - httpx - INFO - HTTP Request: POST https://ark.cn-beijing.volces.com/api/v3/responses "HTTP/1.1 200 OK"
+2026-02-11 01:00:39,487 - app.routers.tarot - INFO - Generated followup questions for user: ['如何通过具体行动修复因沟通问题受损的职场关系？', '在向上沟通中，我可以用哪些话术替代命令式表达？', '事业发展中可能出现的决策风险有哪些，如何提前预判？', '何时是我主动寻求新机会（如跳槽/晋升）的最佳时机？', '我可以通过哪些日常习惯培养谦逊的领导风格？', '在事业停滞期，我如何通过自我觉察找到突破方向？']
+INFO:     127.0.0.1:54038 - "POST /api/tarot/followup?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57308 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57307 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57307 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57308 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57307 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57307 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57307 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57307 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57395 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57396 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57395 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57396 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57395 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57395 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57395 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57395 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'app/dependencies.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [59024]
+2026-02-11 01:44:51,449 - root - INFO - Logging initialized. Writing to logs/2026-02-11_01-44-51.log
+INFO:     Started server process [88076]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/dependencies.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [88076]
+2026-02-11 01:46:20,382 - root - INFO - Logging initialized. Writing to logs/2026-02-11_01-46-20.log
+INFO:     Started server process [88469]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/dependencies.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [88469]
+2026-02-11 01:47:14,708 - root - INFO - Logging initialized. Writing to logs/2026-02-11_01-47-14.log
+INFO:     Started server process [88854]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'app/routers/stripe.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [88854]
+WARNING:  StatReload detected changes in 'app/routers/stripe.py'. Reloading...
+Process SpawnProcess-5:
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 67, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 71, in serve
+    await self._serve(sockets)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 78, in _serve
+    config.load()
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/config.py", line 439, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 999, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/app/main.py", line 4, in <module>
+    from app.routers import auth, tarot, debug, system, stripe, admin, palm
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/app/routers/stripe.py", line 38, in <module>
+    async def get_stripe_config(db: Session = Depends(get_db)):
+                                                      ^^^^^^
+NameError: name 'get_db' is not defined
+Process SpawnProcess-6:
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 67, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 71, in serve
+    await self._serve(sockets)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 78, in _serve
+    config.load()
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/config.py", line 439, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 999, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/app/main.py", line 4, in <module>
+    from app.routers import auth, tarot, debug, system, stripe, admin, palm
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/app/routers/stripe.py", line 38, in <module>
+    async def get_stripe_config(db: Session = Depends(get_db)):
+                                                      ^^^^^^
+NameError: name 'get_db' is not defined
+WARNING:  StatReload detected changes in 'app/routers/stripe.py'. Reloading...
+Process SpawnProcess-7:
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/_subprocess.py", line 80, in subprocess_started
+    target(sockets=sockets)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 67, in run
+    return asyncio_run(self.serve(sockets=sockets), loop_factory=self.config.get_loop_factory())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 71, in serve
+    await self._serve(sockets)
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/server.py", line 78, in _serve
+    config.load()
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/config.py", line 439, in load
+    self.loaded_app = import_from_string(self.app)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/venv/lib/python3.12/site-packages/uvicorn/importer.py", line 19, in import_from_string
+    module = importlib.import_module(module_str)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 999, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/app/main.py", line 4, in <module>
+    from app.routers import auth, tarot, debug, system, stripe, admin, palm
+  File "/Users/mico/Documents/trae_projects/mentobe_backend/app/routers/stripe.py", line 38, in <module>
+    async def get_stripe_config(db: Session = Depends(get_db)):
+                                                      ^^^^^^
+NameError: name 'get_db' is not defined
+WARNING:  StatReload detected changes in 'app/routers/stripe.py'. Reloading...
+2026-02-11 01:49:55,814 - root - INFO - Logging initialized. Writing to logs/2026-02-11_01-49-55.log
+INFO:     Started server process [91046]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:64980 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64980 - "GET /api/tarot/categories?lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64981 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64980 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64980 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64980 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64980 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64980 - "GET /api/auth/quota?userId=855d6518-3a3d-4342-b1bd-925c63503e00&lang=cn HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [91046]
+INFO:     Stopping reloader process [58966]
